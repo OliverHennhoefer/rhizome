@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { createGraph, type GraphProjection, type RhizomeGraph } from "../src/app/graph";
 import {
+  labelLodForRatio,
+  selectPriorityLabels,
+  shouldForceNeighborLabels,
+} from "../src/app/graph-labels";
+import {
   buildPhysicalLinks,
   createDisplayGraph,
   GraphMotionController,
@@ -9,19 +14,18 @@ import {
   ProjectionInvariantError,
   physicalLinkStrength,
 } from "../src/app/graph-layout";
-import {
-  collisionBoxForNode,
-  graphUnitsPerPixel,
-  LabelWidthCache,
-  labelLodForRatio,
-  selectPriorityLabels,
-} from "../src/app/graph-nudge";
+import { blendGraphTone, nodeTone } from "../src/app/graph-theme";
 import type { GraphManifest } from "../src/shared/contracts";
 
 const manifest: GraphManifest = {
   schemaVersion: 2,
   contentHash: "layout-fixture",
-  config: { site: { title: "Layout" }, relations: {} },
+  config: {
+    site: { title: "Layout" },
+    relations: {
+      "depends-on": { label: "Depends on", directed: true, color: "#d97757" },
+    },
+  },
   nodes: [
     {
       id: "a",
@@ -153,8 +157,15 @@ describe("display graph", () => {
       { source: "a", target: "b", occurrences: 6 },
       { source: "b", target: "c", occurrences: 1 },
     ]);
-    expect(physicalLinkStrength(1)).toBeGreaterThanOrEqual(0.1);
-    expect(physicalLinkStrength(1_000_000)).toBe(0.35);
+    expect(physicalLinkStrength(1)).toBeGreaterThanOrEqual(0.04);
+    expect(physicalLinkStrength(1)).toBeLessThan(0.06);
+    expect(physicalLinkStrength(1_000_000)).toBe(0.09);
+  });
+
+  it("carries configured relation colors into the runtime graph", () => {
+    const graph = createGraph(manifest);
+    expect(graph.getEdgeAttribute("ab-relation", "relationColor")).toBe("#d97757");
+    expect(graph.getEdgeAttribute("ab-link", "relationColor")).toBe("#73818d");
   });
 });
 
@@ -253,10 +264,9 @@ describe("motion policy and position state", () => {
     controller.kill();
   });
 
-  it("bounds viewport nudges and temporarily fixes the selected node", async () => {
+  it("bounds automatic motion around the session origin", async () => {
     const source = createGraph(manifest);
     const positions = new GraphPositionStore(source);
-    positions.setCurrent("b", { x: 2, y: 0 });
     const display = createDisplayGraph(source, projection(["a", "b"], ["ab-link"]), positions);
     const controller = new GraphMotionController({
       graph: display,
@@ -266,76 +276,41 @@ describe("motion policy and position state", () => {
     });
     await controller.start();
     controller.pause();
-
-    const selectedOrigin = positions.getCurrent("a");
-    const movingOrigin = positions.getCurrent("b");
-    const box: [[number, number], [number, number]] = [
-      [-12, -12],
-      [12, 12],
-    ];
+    const origin = positions.getCurrent("b");
+    controller.advance(200);
     expect(
-      controller.updateViewportNudge({
-        boxes: new Map([
-          ["a", box],
-          ["b", box],
-        ]),
-        maxDisplacement: 5,
-        selected: "a",
-      }),
-    ).toBe(true);
-    expect(controller.isTemporarilyFixed("a")).toBe(true);
-    controller.advance(20);
-
-    expect(positions.getCurrent("a")).toEqual(selectedOrigin);
-    expect(
-      Math.hypot(
-        positions.getCurrent("b").x - movingOrigin.x,
-        positions.getCurrent("b").y - movingOrigin.y,
-      ),
-    ).toBeLessThanOrEqual(5.000_001);
-
-    controller.cancelViewportNudge();
-    expect(controller.isTemporarilyFixed("a")).toBe(false);
+      Math.hypot(positions.getCurrent("b").x - origin.x, positions.getCurrent("b").y - origin.y),
+    ).toBeLessThanOrEqual(14.000_001);
     controller.kill();
   });
 });
 
-describe("viewport nudge geometry", () => {
-  it("builds symmetric node boxes and asymmetric priority-label boxes", () => {
-    expect(collisionBoxForNode({ radiusPixels: 6, unitsPerPixel: 2 })).toEqual([
-      [-20, -20],
-      [20, 20],
-    ]);
-    expect(
-      collisionBoxForNode({ radiusPixels: 6, unitsPerPixel: 2, labelWidthPixels: 50 }),
-    ).toEqual([
-      [-20, -20],
-      [130, 20],
-    ]);
+describe("label policy", () => {
+  it("reduces label density while zooming out", () => {
+    expect(labelLodForRatio(1)).toEqual({ density: 0.045, renderedSizeThreshold: 5.5 });
+    expect(labelLodForRatio(4)).toEqual({ density: 0.008, renderedSizeThreshold: 9.5 });
   });
 
-  it("converts viewport pixels and applies zoom-dependent label LOD", () => {
-    expect(graphUnitsPerPixel(({ x, y }) => ({ x: x * 3, y: y * 3 }))).toBe(3);
-    expect(labelLodForRatio(1)).toEqual({ density: 0.08, renderedSizeThreshold: 8 });
-    expect(labelLodForRatio(4)).toEqual({ density: 0.015, renderedSizeThreshold: 12 });
-  });
+  it("forces a bounded neighbor set only in a close focused view", () => {
+    expect(shouldForceNeighborLabels(true, 48, 1.25)).toBe(true);
+    expect(shouldForceNeighborLabels(false, 20, 0.8)).toBe(false);
+    expect(shouldForceNeighborLabels(true, 49, 0.8)).toBe(false);
+    expect(shouldForceNeighborLabels(true, 20, 1.26)).toBe(false);
 
-  it("selects priority labels deterministically and caches measurements", () => {
     const priorities = selectPriorityLabels(
       ["low", "tie-b", "high", "tie-a"],
       (id) => ({ low: 1, high: 5, "tie-a": 3, "tie-b": 3 })[id] ?? 0,
       3,
     );
     expect([...priorities]).toEqual(["high", "tie-a", "tie-b"]);
+  });
+});
 
-    let measurements = 0;
-    const cache = new LabelWidthCache((label) => {
-      measurements += 1;
-      return label.length * 7;
-    });
-    expect(cache.get("Rhizome")).toBe(49);
-    expect(cache.get("Rhizome")).toBe(49);
-    expect(cache.size).toBe(1);
-    expect(measurements).toBe(1);
+describe("graph color policy", () => {
+  it("uses muted community hues and blends inactive relations into the graph stage", () => {
+    expect(nodeTone("note", 0)).toBe("#71849b");
+    expect(nodeTone("missing", 0)).toBe("#a18463");
+    expect(blendGraphTone("#d97757", 0)).toBe("#17181a");
+    expect(blendGraphTone("#d97757", 1)).toBe("#d97757");
   });
 });

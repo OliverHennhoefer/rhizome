@@ -1,8 +1,6 @@
-import type { BoundingBoxForce } from "d3-bboxCollide";
 import type { Simulation, SimulationLinkDatum, SimulationNodeDatum } from "d3-force";
 import type { GraphNode } from "../shared/contracts";
 import type { GraphProjection, RhizomeGraph } from "./graph";
-import { type CollisionBox, collisionBoxForNode, NUDGE_SETTINGS } from "./graph-nudge";
 
 export type LayoutStatus = "loading" | "running" | "settled" | "paused" | "static";
 
@@ -20,15 +18,17 @@ export const DESKTOP_MOTION_LIMITS: MotionLimits = { nodes: 600, edges: 4_000 };
 export const COMPACT_MOTION_LIMITS: MotionLimits = { nodes: 200, edges: 1_000 };
 
 export const FORCE_SETTINGS = {
-  anchorStrength: 0.015,
-  centerStrength: 0.04,
-  charge: -55,
-  initialAlpha: 0.65,
-  alphaDecay: 0.035,
-  alphaMin: 0.025,
-  collisionIterations: 2,
-  linkDistance: 36,
-  velocityDecay: 0.32,
+  anchorStrength: 0.075,
+  centerStrength: 0.01,
+  charge: -20,
+  initialAlpha: 0.22,
+  alphaDecay: 0.09,
+  alphaMin: 0.02,
+  collisionIterations: 1,
+  dragAlpha: 0.16,
+  dragAlphaTarget: 0.09,
+  maxAutomaticDisplacement: 14,
+  velocityDecay: 0.5,
 } as const;
 
 export interface PhysicalLink {
@@ -41,9 +41,9 @@ interface LayoutNode extends SimulationNodeDatum {
   id: string;
   baseX: number;
   baseY: number;
-  collisionBox: CollisionBox;
   degree: number;
-  nudgeOrigin?: Position;
+  motionOriginX: number;
+  motionOriginY: number;
 }
 
 interface LayoutLink extends SimulationLinkDatum<LayoutNode> {
@@ -63,12 +63,6 @@ interface StoredPosition {
   base: Position;
   current: Position;
   pinned: boolean;
-}
-
-export interface ViewportNudgeRequest {
-  boxes: ReadonlyMap<string, CollisionBox>;
-  maxDisplacement: number;
-  selected?: string;
 }
 
 export type ProjectionInvariantCode = "missing-node" | "missing-edge" | "edge-outside-projection";
@@ -223,7 +217,18 @@ export function buildPhysicalLinks(graph: RhizomeGraph): PhysicalLink[] {
 }
 
 export function physicalLinkStrength(occurrences: number): number {
-  return Math.min(0.35, 0.1 + Math.log1p(Math.max(1, occurrences)) * 0.05);
+  return Math.min(0.09, 0.035 + Math.log1p(Math.max(1, occurrences)) * 0.012);
+}
+
+function physicalLinkDistance(link: LayoutLink): number {
+  if (typeof link.source === "string" || typeof link.target === "string") return 28;
+  return Math.max(
+    18,
+    Math.min(
+      72,
+      Math.hypot(link.source.baseX - link.target.baseX, link.source.baseY - link.target.baseY),
+    ),
+  );
 }
 
 function seededRandom(seed: string): () => number {
@@ -247,13 +252,8 @@ export class GraphMotionController {
   private readonly onStatus: (status: LayoutStatus) => void;
   private readonly onPinnedChange: () => void;
   private simulation?: Simulation<LayoutNode, LayoutLink>;
-  private collisionForce?: BoundingBoxForce<LayoutNode>;
-  private layoutNodes: LayoutNode[] = [];
   private nodes = new Map<string, LayoutNode>();
   private activeDrag?: string;
-  private temporarySelection?: string;
-  private nudgeActive = false;
-  private nudgeMaxDisplacement = Number.POSITIVE_INFINITY;
   private killed = false;
 
   constructor(options: MotionControllerOptions) {
@@ -265,7 +265,7 @@ export class GraphMotionController {
 
   async start(settled = false): Promise<void> {
     this.onStatus("loading");
-    const [d3, bbox] = await Promise.all([import("d3-force"), import("d3-bboxCollide")]);
+    const d3 = await import("d3-force");
     if (this.killed) return;
 
     const nodes: LayoutNode[] = [];
@@ -279,11 +279,9 @@ export class GraphMotionController {
         y: current.y,
         baseX: base.x,
         baseY: base.y,
-        collisionBox: collisionBoxForNode({
-          radiusPixels: 4 + Math.sqrt(Number(attributes.degree) || 0) * 1.7,
-          unitsPerPixel: 1,
-        }),
         degree: Number(attributes.degree) || 0,
+        motionOriginX: current.x,
+        motionOriginY: current.y,
         ...(pinned || this.activeDrag === id
           ? {
               fx: current.x,
@@ -294,16 +292,15 @@ export class GraphMotionController {
       nodes.push(node);
       this.nodes.set(id, node);
     });
-    this.layoutNodes = nodes;
-
     const links: LayoutLink[] = buildPhysicalLinks(this.graph).map((link) => ({ ...link }));
     const linkForce = d3
       .forceLink<LayoutNode, LayoutLink>(links)
       .id((node) => node.id)
-      .distance(FORCE_SETTINGS.linkDistance)
+      .distance(physicalLinkDistance)
       .strength((link) => physicalLinkStrength(link.occurrences));
-    this.collisionForce = bbox
-      .bboxCollide<LayoutNode>((node) => node.collisionBox)
+    const collisionForce = d3
+      .forceCollide<LayoutNode>((node) => Math.min(7, 3.5 + Math.sqrt(node.degree) * 0.6))
+      .strength(0.7)
       .iterations(FORCE_SETTINGS.collisionIterations);
 
     this.simulation = d3
@@ -331,11 +328,10 @@ export class GraphMotionController {
         "anchor-y",
         d3.forceY<LayoutNode>((node) => node.baseY).strength(FORCE_SETTINGS.anchorStrength),
       )
-      .force("collide", this.collisionForce)
+      .force("collide", collisionForce)
       .on("tick", () => this.syncPositions())
       .on("end", () => {
         this.syncPositions();
-        this.clearNudgeState();
         if (!this.killed) this.onStatus("settled");
       });
     if (settled) {
@@ -347,89 +343,20 @@ export class GraphMotionController {
     }
   }
 
-  private releaseTemporarySelection(): void {
-    const id = this.temporarySelection;
-    this.temporarySelection = undefined;
-    if (!id || id === this.activeDrag || this.positions.isPinned(id)) return;
-    const node = this.nodes.get(id);
-    if (node) {
-      node.fx = null;
-      node.fy = null;
-    }
-  }
-
-  private clearNudgeState(): void {
-    this.nudgeActive = false;
-    this.nudgeMaxDisplacement = Number.POSITIVE_INFINITY;
-    for (const node of this.layoutNodes) node.nudgeOrigin = undefined;
-    this.releaseTemporarySelection();
-  }
-
-  private clampNudgeDisplacement(node: LayoutNode): void {
-    const origin = node.nudgeOrigin;
-    if (!this.nudgeActive || !origin || node.id === this.temporarySelection) return;
+  private clampAutomaticDisplacement(node: LayoutNode): void {
+    if (node.id === this.activeDrag || this.positions.isPinned(node.id)) return;
     const x = Number(node.x);
     const y = Number(node.y);
     if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-    const deltaX = x - origin.x;
-    const deltaY = y - origin.y;
+    const deltaX = x - node.motionOriginX;
+    const deltaY = y - node.motionOriginY;
     const distance = Math.hypot(deltaX, deltaY);
-    if (distance <= this.nudgeMaxDisplacement || distance === 0) return;
-    const scale = this.nudgeMaxDisplacement / distance;
-    node.x = origin.x + deltaX * scale;
-    node.y = origin.y + deltaY * scale;
+    if (distance <= FORCE_SETTINGS.maxAutomaticDisplacement || distance === 0) return;
+    const scale = FORCE_SETTINGS.maxAutomaticDisplacement / distance;
+    node.x = node.motionOriginX + deltaX * scale;
+    node.y = node.motionOriginY + deltaY * scale;
     node.vx = 0;
     node.vy = 0;
-  }
-
-  updateViewportNudge(request: ViewportNudgeRequest): boolean {
-    if (this.killed || !this.simulation || !this.collisionForce) return false;
-    if (!this.nudgeActive) {
-      this.nudgeActive = true;
-      for (const node of this.layoutNodes) {
-        if (Number.isFinite(node.x) && Number.isFinite(node.y)) {
-          node.nudgeOrigin = { x: Number(node.x), y: Number(node.y) };
-        }
-      }
-    }
-
-    this.nudgeMaxDisplacement = Math.max(0, request.maxDisplacement);
-    for (const node of this.layoutNodes) {
-      const box = request.boxes.get(node.id);
-      if (box) node.collisionBox = box;
-    }
-
-    if (this.temporarySelection !== request.selected) this.releaseTemporarySelection();
-    if (request.selected && request.selected !== this.activeDrag) {
-      const selected = this.nodes.get(request.selected);
-      if (selected && !this.positions.isPinned(request.selected)) {
-        selected.fx = selected.x;
-        selected.fy = selected.y;
-        this.temporarySelection = request.selected;
-      }
-    }
-
-    this.simulation.force("collide", null).force("collide", this.collisionForce);
-    this.simulation
-      .alphaTarget(NUDGE_SETTINGS.alphaTarget)
-      .alpha(Math.max(this.simulation.alpha(), NUDGE_SETTINGS.alpha))
-      .restart();
-    this.onStatus("running");
-    return true;
-  }
-
-  finishViewportNudge(): void {
-    if (!this.nudgeActive || !this.simulation) return;
-    this.simulation.alphaTarget(0);
-  }
-
-  cancelViewportNudge(): void {
-    this.simulation?.alphaTarget(0);
-    this.clearNudgeState();
-  }
-
-  isTemporarilyFixed(id: string): boolean {
-    return this.temporarySelection === id;
   }
 
   private syncPositions(): void {
@@ -438,7 +365,7 @@ export class GraphMotionController {
       (id, attributes) => {
         const node = this.nodes.get(id);
         if (!node || !Number.isFinite(node.x) || !Number.isFinite(node.y)) return attributes;
-        this.clampNudgeDisplacement(node);
+        this.clampAutomaticDisplacement(node);
         const position = { x: node.x as number, y: node.y as number };
         this.positions.setCurrent(id, position);
         return { ...attributes, ...position };
@@ -448,23 +375,26 @@ export class GraphMotionController {
   }
 
   beginDrag(id: string, position: Position): void {
-    this.cancelViewportNudge();
     this.activeDrag = id;
     const node = this.nodes.get(id);
     if (node) {
+      node.motionOriginX = position.x;
+      node.motionOriginY = position.y;
       node.fx = position.x;
       node.fy = position.y;
       node.x = position.x;
       node.y = position.y;
     }
     this.moveDrag(id, position);
-    this.simulation?.alphaTarget(0.18).restart();
+    this.simulation?.alphaTarget(FORCE_SETTINGS.dragAlphaTarget).restart();
     if (this.simulation) this.onStatus("running");
   }
 
   moveDrag(id: string, position: Position): void {
     const node = this.nodes.get(id);
     if (node) {
+      node.motionOriginX = position.x;
+      node.motionOriginY = position.y;
       node.fx = position.x;
       node.fy = position.y;
       node.x = position.x;
@@ -495,13 +425,15 @@ export class GraphMotionController {
     this.activeDrag = undefined;
     this.onPinnedChange();
     if (this.simulation) {
-      this.simulation.alphaTarget(0).alpha(Math.max(this.simulation.alpha(), 0.35)).restart();
+      this.simulation
+        .alphaTarget(0)
+        .alpha(Math.max(this.simulation.alpha(), FORCE_SETTINGS.dragAlpha))
+        .restart();
       this.onStatus("running");
     }
   }
 
   pause(): void {
-    this.cancelViewportNudge();
     this.simulation?.stop();
     if (!this.killed) this.onStatus("paused");
   }
@@ -514,11 +446,8 @@ export class GraphMotionController {
 
   kill(): void {
     this.killed = true;
-    this.cancelViewportNudge();
     this.simulation?.stop();
     this.simulation = undefined;
-    this.collisionForce = undefined;
-    this.layoutNodes = [];
     this.nodes.clear();
   }
 }
@@ -528,5 +457,5 @@ export function nodeColorWithAlpha(color: string, alpha: string): string {
 }
 
 export function nodeRadius(node: GraphNode): number {
-  return Math.min(10, 4 + Math.sqrt(Number(node.degree) || 0) * 1.7);
+  return Math.min(9, 3.5 + Math.sqrt(Number(node.degree) || 0) * 0.85);
 }

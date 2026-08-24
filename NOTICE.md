@@ -11,10 +11,6 @@ The bounded graph-motion interaction is informed by Quartz's MIT-licensed graph 
 Rhizome retains its own Sigma renderer and data model, and uses the ISC-licensed `d3-force`
 package for transient browser-side physics.
 
-Zoom-aware label and node collision uses the Unlicense-licensed `d3-bboxCollide` package by
-Elijah Meeks. Rhizome supplies its own Sigma lifecycle, screen-to-graph sizing, motion bounds, and
-label-priority policy around that collision force.
-
 Mathematical notation is parsed and rendered at build time with the MIT-licensed `remark-math`,
 `rehype-katex`, and KaTeX packages. KaTeX styles and fonts are bundled locally; Rhizome loads no
 client-side math renderer or math CDN.

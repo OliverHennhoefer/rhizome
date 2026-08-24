@@ -90,6 +90,7 @@ export function Graph2D({
     viewport.sync({
       projection,
       selected,
+      focus,
       motionEnabled,
       compact,
       reducedMotion,
@@ -99,7 +100,16 @@ export function Graph2D({
       appliedOverviewRevision.current = overviewRevision;
       viewport.resetLayout();
     }
-  }, [compact, motionEnabled, onSelect, overviewRevision, projection, reducedMotion, selected]);
+  }, [
+    compact,
+    focus,
+    motionEnabled,
+    onSelect,
+    overviewRevision,
+    projection,
+    reducedMotion,
+    selected,
+  ]);
 
   return (
     <>

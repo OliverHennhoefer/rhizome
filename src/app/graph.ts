@@ -1,6 +1,7 @@
 import Graph from "graphology";
 import type { AbstractGraph } from "graphology-types";
 import type { GraphEdge, GraphManifest, GraphNode } from "../shared/contracts";
+import { relationTone } from "./graph-theme";
 
 export interface ProjectionInput {
   visibleTypes: ReadonlySet<string>;
@@ -16,7 +17,7 @@ export interface GraphProjection {
   edges: ReadonlySet<string>;
 }
 
-export type RuntimeGraphEdge = GraphEdge & { relationType: string };
+export type RuntimeGraphEdge = GraphEdge & { relationColor: string; relationType: string };
 export type RhizomeGraph = AbstractGraph<GraphNode, RuntimeGraphEdge>;
 
 export function createGraph(manifest: GraphManifest): RhizomeGraph {
@@ -25,6 +26,7 @@ export function createGraph(manifest: GraphManifest): RhizomeGraph {
   for (const edge of manifest.edges) {
     const attributes = {
       ...edge,
+      relationColor: manifest.config.relations[edge.type]?.color ?? relationTone(edge.type),
       relationType: edge.type,
       type: edge.directed ? "arrow" : "line",
     };

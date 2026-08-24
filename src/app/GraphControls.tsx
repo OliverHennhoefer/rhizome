@@ -308,7 +308,12 @@ export function GraphControls({
               <div className="relation-legend">
                 {relationNames.map((relation) => (
                   <span key={relation}>
-                    <i style={{ background: relationTone(relation) }} />
+                    <i
+                      style={{
+                        background:
+                          manifest.config.relations[relation]?.color ?? relationTone(relation),
+                      }}
+                    />
                     {manifest.config.relations[relation]?.label ?? relation}
                   </span>
                 ))}

@@ -349,16 +349,33 @@ function layout(
   previous: Map<string, { x: number; y: number; community: number }> | undefined,
   incremental: boolean,
 ): void {
-  const graph = new Graph({ type: "undirected", multi: true, allowSelfLoops: false });
+  const graph = new Graph({ type: "undirected", multi: false, allowSelfLoops: false });
   for (const node of nodes) {
     const coordinate = previous?.get(node.id) ?? initialCoordinate(node.id);
     graph.addNode(node.id, { x: coordinate.x, y: coordinate.y, size: 1 });
   }
+  const physicalPairs = new Map<string, { source: string; target: string }>();
   for (const edge of edges) {
     if (edge.source === edge.target || !graph.hasNode(edge.source) || !graph.hasNode(edge.target))
       continue;
-    graph.addUndirectedEdgeWithKey(edge.id, edge.source, edge.target, { weight: edge.occurrences });
+    const [source, target] =
+      edge.source.localeCompare(edge.target) <= 0
+        ? [edge.source, edge.target]
+        : [edge.target, edge.source];
+    physicalPairs.set(JSON.stringify([source, target]), { source, target });
   }
+  for (const [pair, { source, target }] of [...physicalPairs].sort(([left], [right]) =>
+    left.localeCompare(right),
+  )) {
+    graph.addUndirectedEdgeWithKey(stableId("layout-edge", pair), source, target, { weight: 1 });
+  }
+  graph.updateEachNodeAttributes(
+    (id, attributes) => ({
+      ...attributes,
+      size: Math.min(6, 1.5 + Math.sqrt(graph.degree(id)) * 0.4),
+    }),
+    { attributes: ["size"] },
+  );
 
   let communities: Record<string, number> = {};
   if (graph.order > 1 && graph.size > 0) {
@@ -366,13 +383,16 @@ function layout(
     if (!incremental) {
       const inferred = forceAtlas2.inferSettings(graph);
       forceAtlas2.assign(graph, {
-        iterations: Math.min(240, 60 + Math.ceil(Math.log2(graph.order + 1) * 14)),
+        iterations: Math.min(320, 100 + Math.ceil(Math.log2(graph.order + 1) * 22)),
         settings: {
           ...inferred,
+          adjustSizes: true,
           barnesHutOptimize: graph.order > 100,
-          gravity: 0.8,
-          scalingRatio: Math.max(2, Math.log2(graph.order + 1)),
-          slowDown: 2,
+          gravity: 0.08,
+          outboundAttractionDistribution: true,
+          scalingRatio: Math.max(12, Math.log2(graph.order + 1) * 2),
+          slowDown: Math.max(5, inferred.slowDown ?? 5),
+          strongGravityMode: false,
         },
       });
     }

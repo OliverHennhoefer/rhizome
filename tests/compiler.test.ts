@@ -60,6 +60,9 @@ describe("vault compiler", () => {
     expect(manifest.facets.tags.compiler).toEqual(["Alpha"]);
 
     const alpha = manifest.nodes.find((node) => node.id === "Alpha");
+    const beta = manifest.nodes.find((node) => node.id === "folder/Beta");
+    expect(alpha?.degree).toBe(1);
+    expect(beta?.degree).toBe(1);
     const details = JSON.parse(String(result.assets.get(alpha?.detailsRef ?? ""))) as NodeDetails;
     expect(details.html).toContain('class="callout callout-note"');
     expect(details.html).toContain("?note=folder%2FBeta");

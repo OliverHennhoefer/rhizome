@@ -22,7 +22,6 @@
     "@quartz-community/remark-obsidian": "^0.2.2",
     "@vitejs/plugin-react": "^5.0.0",
     "ajv": "^8.17.1",
-    "d3-bboxCollide": "^1.0.4",
     "d3-force": "^3.0.0",
     "graphology": "^0.26.0",
     "graphology-communities-louvain": "^2.0.2",

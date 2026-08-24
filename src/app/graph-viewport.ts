@@ -14,6 +14,7 @@ import {
   type RuntimeGraphEdge,
   reconcileProjectedHover,
 } from "./graph";
+import { labelLodForRatio, selectPriorityLabels, shouldForceNeighborLabels } from "./graph-labels";
 import {
   createDisplayGraph,
   GraphMotionController,
@@ -23,20 +24,12 @@ import {
   nodeColorWithAlpha,
   nodeRadius,
 } from "./graph-layout";
-import {
-  collisionBoxForNode,
-  graphUnitsPerPixel,
-  LabelWidthCache,
-  labelLodForRatio,
-  NUDGE_SETTINGS,
-  type NudgeStatus,
-  selectPriorityLabels,
-} from "./graph-nudge";
-import { COMMUNITY_TONES, relationTone } from "./graph-theme";
+import { blendGraphTone, nodeTone } from "./graph-theme";
 
 export interface GraphViewportSnapshot {
   projection: GraphProjection;
   selected?: string;
+  focus: boolean;
   motionEnabled: boolean;
   compact: boolean;
   reducedMotion: boolean;
@@ -74,16 +67,8 @@ export class GraphViewportSession {
   private motion?: GraphMotionController;
   private motionFrame?: number;
   private cameraFrame?: number;
-  private nudgeFrame?: number;
-  private nudgeIdleTimer?: ReturnType<typeof setTimeout>;
-  private nudgePending = false;
-  private nudgeStatus: NudgeStatus = "disabled";
-  private suppressCameraNudge = false;
-  private cameraAnimationToken = 0;
-  private lastCameraRatio = 1;
-  private labelDensity = 0.08;
-  private labelThreshold = 8;
-  private readonly labelWidths: LabelWidthCache;
+  private labelDensity = 0.045;
+  private labelThreshold = 5.5;
   private drag?: DragState;
   private hovered?: string;
   private hoverNeighbors = new Set<string>();
@@ -99,13 +84,6 @@ export class GraphViewportSession {
     this.events = events;
     this.positions = new GraphPositionStore(sourceGraph);
     this.displayGraph = sourceGraph.nullCopy();
-    const measureContext = document.createElement("canvas").getContext("2d");
-    this.labelWidths = new LabelWidthCache((label) => {
-      if (!measureContext) return label.length * 7;
-      measureContext.font =
-        '500 12px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif';
-      return measureContext.measureText(label).width;
-    });
 
     const drawHover: NodeHoverDrawingFunction<GraphNode, RuntimeGraphEdge> = (context, data) => {
       const key = (data as typeof data & { key?: string }).key;
@@ -148,15 +126,16 @@ export class GraphViewportSession {
       allowInvalidContainer: false,
       defaultDrawNodeLabel: drawLabel,
       defaultDrawNodeHover: drawHover,
-      defaultNodeColor: "#aeaeb2",
-      defaultEdgeColor: "#48484a",
+      defaultNodeColor: "#71849b",
+      defaultEdgeColor: "#73818d",
       edgeProgramClasses: edgePrograms,
       hideEdgesOnMove: true,
+      hideLabelsOnMove: true,
       labelColor: { color: "#f5f5f7" },
-      labelDensity: 0.08,
+      labelDensity: 0.045,
       labelFont: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif',
-      labelGridCellSize: 120,
-      labelRenderedSizeThreshold: 8,
+      labelGridCellSize: 140,
+      labelRenderedSizeThreshold: 5.5,
       labelSize: 12,
       labelWeight: "500",
       maxCameraRatio: 4,
@@ -166,17 +145,17 @@ export class GraphViewportSession {
     this.renderer.setSetting("nodeReducer", (node, data) => this.reduceNode(node, data));
     this.renderer.setSetting("edgeReducer", (_, data) => this.reduceEdge(data));
     this.renderer.getCamera().setState({ x: 0.5, y: 0.5, ratio: OVERVIEW_CAMERA_RATIO, angle: 0 });
-    this.lastCameraRatio = this.renderer.getCamera().getState().ratio;
-    this.applyLabelLod(this.lastCameraRatio);
-    this.container.setAttribute("data-nudge-status", this.nudgeStatus);
-    this.container.setAttribute("data-camera-ratio", this.lastCameraRatio.toFixed(4));
+    const cameraRatio = this.renderer.getCamera().getState().ratio;
+    this.applyLabelLod(cameraRatio);
+    this.container.setAttribute("data-camera-ratio", cameraRatio.toFixed(4));
     this.renderer.getCamera().on("updated", this.handleCameraUpdate);
     this.bindInteractions();
   }
 
   private nodeSize(node: string, data: GraphNode): number {
-    const size = node === this.selected ? 13 : nodeRadius(data);
-    return node === this.hovered ? size + 2 : size;
+    const size = node === this.selected ? 11.5 : nodeRadius(data);
+    const neighborSize = this.selectedNeighbors.has(node) ? size + 0.7 : size;
+    return node === this.hovered ? neighborSize + 1.5 : neighborSize;
   }
 
   private isPriorityLabel(node: string): boolean {
@@ -188,11 +167,22 @@ export class GraphViewportSession {
     );
   }
 
-  private recomputePriorityNeighborLabels(): void {
-    this.priorityNeighborLabels = selectPriorityLabels(this.selectedNeighbors, (id) => {
-      if (!this.displayGraph.hasNode(id)) return 0;
-      return Number(this.displayGraph.getNodeAttribute(id, "degree")) || 0;
-    });
+  private recomputePriorityNeighborLabels(
+    ratio: number = this.renderer.getCamera().getState().ratio,
+  ): boolean {
+    const previous = this.priorityNeighborLabels;
+    this.priorityNeighborLabels = shouldForceNeighborLabels(
+      Boolean(this.snapshot?.focus),
+      this.displayGraph.order,
+      ratio,
+    )
+      ? selectPriorityLabels(this.selectedNeighbors, (id) => {
+          if (!this.displayGraph.hasNode(id)) return 0;
+          return Number(this.displayGraph.getNodeAttribute(id, "degree")) || 0;
+        })
+      : new Set<string>();
+    if (previous.size !== this.priorityNeighborLabels.size) return true;
+    return [...previous].some((id) => !this.priorityNeighborLabels.has(id));
   }
 
   private reduceNode(node: string, data: GraphNode) {
@@ -202,12 +192,7 @@ export class GraphViewportSession {
     const isHoverNeighbor = this.hoverNeighbors.has(node);
     const isPinned = this.positions.isPinned(node);
     const hoverRelated = !this.hovered || isHovered || isHoverNeighbor;
-    const community = Number(data.community ?? 0);
-    const color = isSelected
-      ? "#ffffff"
-      : isSelectedNeighbor
-        ? "#c7c7cc"
-        : COMMUNITY_TONES[Math.abs(community) % COMMUNITY_TONES.length];
+    const color = isSelected ? "#ffffff" : nodeTone(data.kind, Number(data.community ?? 0));
     const size = this.nodeSize(node, data);
     return {
       ...data,
@@ -225,19 +210,14 @@ export class GraphViewportSession {
       this.selected && (data.source === this.selected || data.target === this.selected);
     const hoverActive =
       this.hovered && (data.source === this.hovered || data.target === this.hovered);
-    const color = relationTone(data.relationType);
+    const color = data.relationColor;
     const active = this.hovered ? hoverActive : selectedActive;
     return {
       ...data,
-      color: active ? color : nodeColorWithAlpha(color, this.hovered ? "20" : "78"),
-      size: active ? 2.4 : this.hovered ? 0.55 : 0.8,
+      color: active ? color : blendGraphTone(color, this.hovered ? 0.1 : 0.24),
+      size: active ? 1.7 : this.hovered ? 0.3 : 0.42,
       zIndex: active ? 2 : 1,
     };
-  }
-
-  private setNudgeStatus(status: NudgeStatus): void {
-    this.nudgeStatus = status;
-    this.container.setAttribute("data-nudge-status", status);
   }
 
   private applyLabelLod(ratio: number): void {
@@ -252,92 +232,10 @@ export class GraphViewportSession {
     }
   }
 
-  private nudgeEligible(): boolean {
-    const snapshot = this.snapshot;
-    return Boolean(
-      snapshot?.motionEnabled &&
-        !snapshot.reducedMotion &&
-        isMotionEligible(snapshot.projection, snapshot.compact),
-    );
-  }
-
-  private collisionBoxes() {
-    const ratio = this.renderer.getCamera().getState().ratio;
-    const unitsPerPixel = graphUnitsPerPixel((point) => this.renderer.viewportToGraph(point));
-    const boxes = new Map<string, ReturnType<typeof collisionBoxForNode>>();
-    this.displayGraph.forEachNode((id, data) => {
-      const radiusPixels = this.renderer.scaleSize(this.nodeSize(id, data), ratio);
-      const labelWidthPixels = this.isPriorityLabel(id)
-        ? this.labelWidths.get(String(data.title ?? id))
-        : undefined;
-      boxes.set(id, collisionBoxForNode({ radiusPixels, unitsPerPixel, labelWidthPixels }));
-    });
-    return {
-      boxes,
-      maxDisplacement: NUDGE_SETTINGS.maxDisplacementPixels * unitsPerPixel,
-    };
-  }
-
-  private finishNudgeGesture(): void {
-    this.nudgeIdleTimer = undefined;
-    this.motion?.finishViewportNudge();
-  }
-
-  private runNudgeFrame(): void {
-    this.nudgeFrame = undefined;
-    if (!this.nudgeEligible()) {
-      this.nudgePending = false;
-      this.setNudgeStatus("disabled");
-      return;
-    }
-
-    const motion = this.motion;
-    if (!motion) return;
-    const request = this.collisionBoxes();
-    const started = motion.updateViewportNudge({ ...request, selected: this.selected });
-    if (!started) return;
-
-    this.nudgePending = false;
-    this.setNudgeStatus("active");
-    if (this.nudgeIdleTimer !== undefined) clearTimeout(this.nudgeIdleTimer);
-    this.nudgeIdleTimer = setTimeout(() => this.finishNudgeGesture(), NUDGE_SETTINGS.idleDelay);
-  }
-
-  private scheduleNudge(): void {
-    if (this.nudgeFrame !== undefined) return;
-    this.nudgeFrame = requestAnimationFrame(() => this.runNudgeFrame());
-  }
-
-  private stopNudge(disabled: boolean): void {
-    if (this.nudgeFrame !== undefined) cancelAnimationFrame(this.nudgeFrame);
-    if (this.nudgeIdleTimer !== undefined) clearTimeout(this.nudgeIdleTimer);
-    this.nudgeFrame = undefined;
-    this.nudgeIdleTimer = undefined;
-    this.nudgePending = false;
-    this.motion?.cancelViewportNudge();
-    this.setNudgeStatus(disabled ? "disabled" : "idle");
-  }
-
-  private handleMotionStatus(status: LayoutStatus): void {
-    this.emitStatus(status);
-    if (status === "settled" && this.nudgeStatus === "active") this.setNudgeStatus("idle");
-  }
-
   private readonly handleCameraUpdate = (state: { ratio: number }): void => {
     this.container.setAttribute("data-camera-ratio", state.ratio.toFixed(4));
     this.applyLabelLod(state.ratio);
-    if (this.suppressCameraNudge) {
-      this.lastCameraRatio = state.ratio;
-      return;
-    }
-    if (Math.abs(state.ratio - this.lastCameraRatio) <= NUDGE_SETTINGS.zoomEpsilon) return;
-    this.lastCameraRatio = state.ratio;
-    if (!this.nudgeEligible()) {
-      this.setNudgeStatus("disabled");
-      return;
-    }
-    this.nudgePending = true;
-    this.scheduleNudge();
+    if (this.recomputePriorityNeighborLabels(state.ratio)) this.renderer.refresh();
   };
 
   private bindInteractions(): void {
@@ -372,7 +270,6 @@ export class GraphViewportSession {
 
   private beginDrag(id: string, event: { x: number; y: number; original: Event }): void {
     if (!this.displayGraph.hasNode(id)) return;
-    this.stopNudge(!this.nudgeEligible());
     const position = this.positions.getCurrent(id);
     this.drag = {
       id,
@@ -478,7 +375,6 @@ export class GraphViewportSession {
   }
 
   private stopMotion(): void {
-    this.stopNudge(true);
     if (this.motionFrame !== undefined) cancelAnimationFrame(this.motionFrame);
     this.motionFrame = undefined;
     this.motion?.kill();
@@ -489,27 +385,22 @@ export class GraphViewportSession {
     const snapshot = this.snapshot;
     if (!snapshot) return;
     if (snapshot.projection.nodes.size <= 1) {
-      this.setNudgeStatus("disabled");
       this.emitStatus("settled");
       return;
     }
     if (!isMotionEligible(snapshot.projection, snapshot.compact)) {
-      this.setNudgeStatus("disabled");
       this.emitStatus("static");
       return;
     }
     if (!snapshot.motionEnabled) {
-      this.setNudgeStatus("disabled");
       this.emitStatus("paused");
       return;
     }
 
-    this.setNudgeStatus(snapshot.reducedMotion ? "disabled" : "idle");
-
     const motion = new GraphMotionController({
       graph: this.displayGraph,
       positions: this.positions,
-      onStatus: (status) => this.handleMotionStatus(status),
+      onStatus: (status) => this.emitStatus(status),
       onPinnedChange: () => {
         this.emitPinnedCount();
         this.renderer.refresh();
@@ -518,18 +409,11 @@ export class GraphViewportSession {
     this.motion = motion;
     this.motionFrame = requestAnimationFrame(() => {
       this.motionFrame = undefined;
-      void motion
-        .start(settled)
-        .then(() => {
-          if (this.destroyed || this.motion !== motion || !this.nudgePending) return;
-          this.scheduleNudge();
-        })
-        .catch((error: unknown) => {
-          if (this.destroyed || this.motion !== motion) return;
-          console.error("Rhizome motion could not start", error);
-          this.setNudgeStatus("disabled");
-          this.emitStatus("paused");
-        });
+      void motion.start(settled).catch((error: unknown) => {
+        if (this.destroyed || this.motion !== motion) return;
+        console.error("Rhizome motion could not start", error);
+        this.emitStatus("paused");
+      });
     });
   }
 
@@ -543,18 +427,10 @@ export class GraphViewportSession {
 
   private animateCamera(target: { x: number; y: number; ratio: number; angle?: number }): void {
     const camera = this.renderer.getCamera();
-    const token = ++this.cameraAnimationToken;
-    this.suppressCameraNudge = true;
-    const finish = () => {
-      if (token !== this.cameraAnimationToken) return;
-      this.lastCameraRatio = camera.getState().ratio;
-      this.suppressCameraNudge = false;
-    };
     if (this.snapshot?.reducedMotion) {
       camera.setState(target);
-      finish();
     } else {
-      void camera.animate(target, { duration: 280, easing: "quadraticInOut" }).finally(finish);
+      void camera.animate(target, { duration: 280, easing: "quadraticInOut" });
     }
   }
 
@@ -575,6 +451,7 @@ export class GraphViewportSession {
     const previous = this.snapshot;
     const projectionChanged = !previous || previous.projection !== next.projection;
     const selectionChanged = previous?.selected !== next.selected;
+    const focusChanged = previous?.focus !== next.focus;
     const previousEligible = previous
       ? isMotionEligible(previous.projection, previous.compact)
       : undefined;
@@ -595,6 +472,7 @@ export class GraphViewportSession {
           : new Set<string>();
       this.recomputePriorityNeighborLabels();
     }
+    if (!projectionChanged && focusChanged) this.recomputePriorityNeighborLabels();
 
     if (this.renderer.getSetting("hideEdgesOnMove") === nextEligible) {
       this.renderer.setSetting("hideEdgesOnMove", !nextEligible);
@@ -605,7 +483,7 @@ export class GraphViewportSession {
       this.startMotion();
     }
 
-    if (!projectionChanged && selectionChanged) this.renderer.refresh();
+    if (!projectionChanged && (selectionChanged || focusChanged)) this.renderer.refresh();
     if (previous && selectionChanged && next.selected && this.displayGraph.hasNode(next.selected)) {
       this.centerSelection(next.selected);
     }
@@ -636,15 +514,11 @@ export class GraphViewportSession {
     this.cancelDrag();
     if (this.cameraFrame !== undefined) cancelAnimationFrame(this.cameraFrame);
     this.cameraFrame = undefined;
-    this.cameraAnimationToken += 1;
-    this.suppressCameraNudge = false;
     this.hovered = undefined;
     this.hoverNeighbors.clear();
     this.priorityNeighborLabels.clear();
-    this.labelWidths.clear();
     this.container.removeAttribute("data-hovered-node");
     this.container.removeAttribute("data-hovered-neighbor-count");
-    this.container.removeAttribute("data-nudge-status");
     this.container.removeAttribute("data-camera-ratio");
     this.renderer.kill();
   }
