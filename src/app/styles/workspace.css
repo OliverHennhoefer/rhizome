@@ -527,22 +527,6 @@
   cursor: not-allowed;
 }
 
-.layout-facts {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px;
-  padding: 10px;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 10px;
-}
-
-.layout-facts strong {
-  color: var(--secondary);
-  font-weight: 550;
-}
-
 .graph-status,
 .focus-status {
   position: absolute;

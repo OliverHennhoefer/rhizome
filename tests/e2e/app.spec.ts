@@ -42,7 +42,9 @@ test("selects notes, restores query state, and loads details lazily", async ({ p
 
 test("renders the analytical graph without a renderer switch", async ({ page }) => {
   await page.goto("");
-  await expect(page.getByTestId("graph-2d")).toBeVisible();
+  const graph = page.getByTestId("graph-2d");
+  await expect(graph).toBeVisible();
+  await expect(graph).toHaveAttribute("data-camera-ratio", "1.0800");
   await expect(page.getByTestId("reader")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Show reader" })).toBeDisabled();
   await expect(page.getByRole("group", { name: "Graph view" })).toHaveCount(0);
@@ -134,29 +136,12 @@ test("selection-only navigation does not reheat the settled graph", async ({ pag
   await expect(graph).toHaveAttribute("data-layout-status", "settled");
 });
 
-test("runs bounded motion, pauses, resumes, and resets", async ({ page }, testInfo) => {
+test("runs bounded motion automatically without layout controls", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "root", "root desktop project only");
   await page.goto("");
   const graph = page.getByTestId("graph-2d");
   await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
-
-  await page.getByRole("button", { name: "Layout" }).click();
-  await page.getByRole("button", { name: "Motion on" }).click();
-  await expect(graph).toHaveAttribute("data-layout-status", "paused");
-  await expect(page.getByRole("button", { name: "Motion off" })).toHaveAttribute(
-    "aria-pressed",
-    "false",
-  );
-  await page.reload();
-  await expect(graph).toHaveAttribute("data-layout-status", "paused");
-  await page.getByRole("button", { name: "Layout" }).click();
-  await expect(page.getByRole("button", { name: "Motion off" })).toBeVisible();
-
-  await page.getByRole("button", { name: "Motion off" }).click();
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
-  await page.getByRole("button", { name: "Reset layout" }).click();
-  await expect(graph).toHaveAttribute("data-pinned-count", "0");
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
+  await expect(page.getByRole("button", { name: "Layout" })).toHaveCount(0);
 });
 
 test("nudges live while zooming and ignores pure camera panning", async ({ page }, testInfo) => {
@@ -184,7 +169,7 @@ test("nudges live while zooming and ignores pure camera panning", async ({ page 
   await expect(graph).toHaveAttribute("data-layout-status", "settled");
 });
 
-test("does not load D3 by default under reduced motion", async ({ page }, testInfo) => {
+test("does not load D3 under reduced motion", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "root", "root desktop project only");
   await page.emulateMedia({ reducedMotion: "reduce" });
   const d3Requests: string[] = [];
@@ -201,16 +186,12 @@ test("does not load D3 by default under reduced motion", async ({ page }, testIn
   expect(d3Requests).toEqual([]);
   expect(bboxRequests).toEqual([]);
   await expect(graph).toHaveAttribute("data-nudge-status", "disabled");
-
-  await page.getByRole("button", { name: "Layout" }).click();
-  await page.getByRole("button", { name: "Motion off" }).click();
-  await expect.poll(() => d3Requests.length).toBeGreaterThan(0);
-  await expect.poll(() => bboxRequests.length).toBeGreaterThan(0);
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
-  await expect(graph).toHaveAttribute("data-nudge-status", "disabled");
+  await expect(page.getByRole("button", { name: "Layout" })).toHaveCount(0);
 });
 
-test("shift-drag pins and normal drag releases a node", async ({ page }, testInfo) => {
+test("shift-drag pins, overview resets, and normal drag releases a node", async ({
+  page,
+}, testInfo) => {
   test.skip(testInfo.project.name !== "root", "root desktop project only");
   await page.goto("");
   const graph = page.getByTestId("graph-2d");
@@ -246,6 +227,30 @@ test("shift-drag pins and normal drag releases a node", async ({ page }, testInf
   await page.mouse.move(x + 35, y + 15, { steps: 4 });
   await page.mouse.up();
   await expect(graph).toHaveAttribute("data-pinned-count", "0");
+
+  await page.goto("");
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
+  await page.getByLabel("Search notes").fill("subword tokenization");
+  await page.getByRole("button", { name: /Subword tokenization/ }).click();
+  await page.waitForTimeout(350);
+  const resetBounds = await graph.boundingBox();
+  expect(resetBounds).not.toBeNull();
+  if (!resetBounds) return;
+  const resetX = resetBounds.x + resetBounds.width / 2;
+  const resetY = resetBounds.y + resetBounds.height / 2;
+  await page.keyboard.down("Shift");
+  await page.mouse.move(resetX, resetY);
+  await expect(graph).toHaveAttribute("data-hovered-node", "Language/Subword tokenization");
+  await page.mouse.down();
+  await page.mouse.move(resetX + 60, resetY + 20, { steps: 5 });
+  await page.mouse.up();
+  await page.keyboard.up("Shift");
+  await expect(graph).toHaveAttribute("data-pinned-count", "1");
+
+  await page.getByRole("button", { name: "Overview" }).click();
+  await expect(graph).toHaveAttribute("data-pinned-count", "0");
+  await expect(graph).toHaveAttribute("data-camera-ratio", "1.0800", { timeout: 2_000 });
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
 });
 
 test("keeps oversized projections static with an explanation", async ({ page }, testInfo) => {
@@ -283,8 +288,7 @@ test("keeps oversized projections static with an explanation", async ({ page }, 
   await expect(graph).toHaveAttribute("data-layout-status", "static");
   await expect(graph).toHaveAttribute("data-nudge-status", "disabled");
   await expect(page.getByText("Focus or filter to enable motion")).toBeVisible();
-  await page.getByRole("button", { name: "Layout" }).click();
-  await expect(page.getByRole("button", { name: "Motion on" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Layout" })).toHaveCount(0);
 });
 
 test("toggles directional focus and returns to a filtered fitted overview", async ({
@@ -314,15 +318,16 @@ test("toggles directional focus and returns to a filtered fitted overview", asyn
   const bounds = await graph.boundingBox();
   expect(bounds).not.toBeNull();
   if (!bounds) return;
+  const overviewRatio = await graph.getAttribute("data-camera-ratio");
   await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
   await page.mouse.wheel(0, 700);
-  await expect.poll(() => graph.getAttribute("data-camera-ratio")).not.toBe("1.0000");
+  await expect.poll(() => graph.getAttribute("data-camera-ratio")).not.toBe(overviewRatio);
 
   await page.getByRole("button", { name: "Overview" }).click();
   await expect(page).not.toHaveURL(/focus=1/);
   await expect(page).not.toHaveURL(/direction=in/);
   await expect(page).toHaveURL(/relation=link/);
-  await expect(graph).toHaveAttribute("data-camera-ratio", "1.0000", { timeout: 2_000 });
+  await expect(graph).toHaveAttribute("data-camera-ratio", "1.0800", { timeout: 2_000 });
   await expect(graph).toHaveAttribute("data-layout-status", "settled");
   await expect(page.getByTestId("reader")).toBeVisible();
 });
@@ -410,7 +415,6 @@ test("closes graph popovers with Escape and restores trigger focus", async ({ pa
 test("matches the graph-first desktop chrome", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "root", "root desktop project only");
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.addInitScript(() => localStorage.setItem("rhizome:motion", "off"));
   await page.goto("");
   const graph = page.getByTestId("graph-2d");
   await expect(graph).toBeVisible();
@@ -479,7 +483,6 @@ test("mobile retains search and reader navigation", async ({ page }, testInfo) =
 test("matches the mobile reader chrome", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-reader", "mobile project only");
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.addInitScript(() => localStorage.setItem("rhizome:motion", "off"));
   await page.goto("?note=Learning%2FAdamW");
   await expect(page.getByTestId("graph-2d")).toBeVisible();
   await expect(page.getByTestId("reader")).toBeVisible();

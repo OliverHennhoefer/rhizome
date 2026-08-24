@@ -16,7 +16,7 @@ Markdown repository → GitHub Actions → graph-native GitHub Pages site
 - Compiles wikilinks, Markdown links, tags, aliases, and declared Properties into a typed graph.
 - Makes dependencies, backlinks, missing targets, source evidence, and direction first-class.
 - Answers “what depends on this?” and “what does this depend on?” through bounded focus views.
-- Produces deterministic layouts, with optional cooling motion for small projections.
+- Produces deterministic layouts, with automatic bounded motion for small projections.
 - Loads the graph once and fetches note bodies only when selected.
 - Renders inline and display math at build time with locally bundled KaTeX.
 - Publishes as static assets under both root and repository GitHub Pages paths.

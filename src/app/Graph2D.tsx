@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { GraphManifest } from "../shared/contracts";
 import { GraphControls } from "./GraphControls";
 import type { GraphProjection, RhizomeGraph } from "./graph";
-import { isMotionEligible, type LayoutStatus } from "./graph-layout";
+import type { LayoutStatus } from "./graph-layout";
 import { GraphViewportSession } from "./graph-viewport";
 
 type FilterKey = "types" | "tags" | "relations";
@@ -25,25 +25,6 @@ interface Props {
   onToggleFilter: (key: FilterKey, value: string) => void;
   onClearFilters: () => void;
   onToggleReader: () => void;
-}
-
-const MOTION_STORAGE_KEY = "rhizome:motion";
-
-function readMotionOverride(): boolean | undefined {
-  try {
-    const value = window.localStorage.getItem(MOTION_STORAGE_KEY);
-    return value === "on" ? true : value === "off" ? false : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function saveMotionOverride(value: boolean): void {
-  try {
-    window.localStorage.setItem(MOTION_STORAGE_KEY, value ? "on" : "off");
-  } catch {
-    // The graph remains usable when storage is unavailable.
-  }
 }
 
 function useMediaQuery(query: string): boolean {
@@ -82,11 +63,9 @@ export function Graph2D({
   const appliedOverviewRevision = useRef(overviewRevision);
   const compact = useMediaQuery("(pointer: coarse), (max-width: 720px)");
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
-  const [motionOverride, setMotionOverride] = useState<boolean | undefined>(readMotionOverride);
   const [status, setStatus] = useState<LayoutStatus>("paused");
   const [pinnedCount, setPinnedCount] = useState(0);
-  const motionEnabled = motionOverride ?? !reducedMotion;
-  const eligible = isMotionEligible(projection, compact);
+  const motionEnabled = !reducedMotion;
 
   useEffect(() => {
     if (!container.current) return;
@@ -107,27 +86,20 @@ export function Graph2D({
   useEffect(() => {
     const viewport = session.current;
     if (!viewport) return;
-    const fitOverview = appliedOverviewRevision.current !== overviewRevision;
+    const resetOverview = appliedOverviewRevision.current !== overviewRevision;
     viewport.sync({
       projection,
       selected,
       motionEnabled,
       compact,
       reducedMotion,
-      settleProjection: fitOverview,
       onSelect,
     });
-    if (fitOverview) {
+    if (resetOverview) {
       appliedOverviewRevision.current = overviewRevision;
-      viewport.fitOverview();
+      viewport.resetLayout();
     }
   }, [compact, motionEnabled, onSelect, overviewRevision, projection, reducedMotion, selected]);
-
-  const toggleMotion = () => {
-    const next = !motionEnabled;
-    setMotionOverride(next);
-    saveMotionOverride(next);
-  };
 
   return (
     <>
@@ -145,17 +117,12 @@ export function Graph2D({
         filters={filters}
         focus={focus}
         manifest={manifest}
-        motionEligible={eligible}
-        motionEnabled={motionEnabled}
         onClearFilters={onClearFilters}
         onDepthChange={onDepthChange}
         onOverview={onOverview}
-        onResetLayout={() => session.current?.resetLayout()}
         onToggleFilter={onToggleFilter}
         onToggleFocus={onToggleFocus}
-        onToggleMotion={toggleMotion}
         onToggleReader={onToggleReader}
-        pinnedCount={pinnedCount}
         projection={projection}
         readerOpen={readerOpen}
         selected={selected}

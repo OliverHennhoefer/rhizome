@@ -40,7 +40,6 @@ export interface GraphViewportSnapshot {
   motionEnabled: boolean;
   compact: boolean;
   reducedMotion: boolean;
-  settleProjection?: boolean;
   onSelect: (id: string) => void;
 }
 
@@ -62,6 +61,7 @@ const edgePrograms = {
   arrow: createEdgeArrowProgram<GraphNode, RuntimeGraphEdge>(),
   line: EdgeLineProgram as EdgeProgramType<GraphNode, RuntimeGraphEdge>,
 };
+const OVERVIEW_CAMERA_RATIO = 1.08;
 
 export class GraphViewportSession {
   private readonly container: HTMLDivElement;
@@ -165,6 +165,7 @@ export class GraphViewportSession {
     });
     this.renderer.setSetting("nodeReducer", (node, data) => this.reduceNode(node, data));
     this.renderer.setSetting("edgeReducer", (_, data) => this.reduceEdge(data));
+    this.renderer.getCamera().setState({ x: 0.5, y: 0.5, ratio: OVERVIEW_CAMERA_RATIO, angle: 0 });
     this.lastCameraRatio = this.renderer.getCamera().getState().ratio;
     this.applyLabelLod(this.lastCameraRatio);
     this.container.setAttribute("data-nudge-status", this.nudgeStatus);
@@ -601,7 +602,7 @@ export class GraphViewportSession {
 
     if (projectionChanged || motionPolicyChanged) {
       if (!projectionChanged) this.stopMotion();
-      this.startMotion(Boolean(projectionChanged && next.settleProjection));
+      this.startMotion();
     }
 
     if (!projectionChanged && selectionChanged) this.renderer.refresh();
@@ -618,18 +619,8 @@ export class GraphViewportSession {
     this.positions.reset();
     this.emitPinnedCount();
     this.installDisplayGraph(snapshot.projection);
-    this.animateCamera({ x: 0.5, y: 0.5, ratio: 1, angle: 0 });
+    this.animateCamera({ x: 0.5, y: 0.5, ratio: OVERVIEW_CAMERA_RATIO, angle: 0 });
     this.startMotion();
-  }
-
-  fitOverview(): void {
-    if (this.destroyed) return;
-    if (this.cameraFrame !== undefined) cancelAnimationFrame(this.cameraFrame);
-    this.cameraFrame = requestAnimationFrame(() => {
-      this.cameraFrame = undefined;
-      this.renderer.resize(true);
-      this.animateCamera({ x: 0.5, y: 0.5, ratio: 1, angle: 0 });
-    });
   }
 
   resize(): void {

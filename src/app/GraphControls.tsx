@@ -5,7 +5,7 @@ import type { LayoutStatus } from "./graph-layout";
 import { relationTone } from "./graph-theme";
 
 type FilterKey = "types" | "tags" | "relations";
-type PopoverName = "focus" | "filters" | "layout";
+type PopoverName = "focus" | "filters";
 
 interface Props {
   manifest: GraphManifest;
@@ -17,33 +17,20 @@ interface Props {
   filters: Record<FilterKey, Set<string>>;
   readerOpen: boolean;
   status: LayoutStatus;
-  pinnedCount: number;
-  motionEnabled: boolean;
-  motionEligible: boolean;
   compact: boolean;
   onOverview: () => void;
   onToggleFocus: (direction: "in" | "out") => void;
   onDepthChange: (depth: number) => void;
   onToggleFilter: (key: FilterKey, value: string) => void;
   onClearFilters: () => void;
-  onToggleMotion: () => void;
-  onResetLayout: () => void;
   onToggleReader: () => void;
 }
 
-function Icon({ name }: { name: "overview" | "focus" | "filter" | "layout" | "reader" }) {
+function Icon({ name }: { name: "overview" | "focus" | "filter" | "reader" }) {
   const paths = {
     overview: <path d="M6 3H3v3M12 3h3v3M6 15H3v-3m9 3h3v-3" />,
     focus: <path d="M3 6h7m0 0L8 4m2 2L8 8m7 4H8m0 0 2-2m-2 2 2 2" />,
     filter: <path d="M3 5h12M5.5 9h7M8 13h2" />,
-    layout: (
-      <>
-        <circle cx="5" cy="6" r="2" />
-        <circle cx="13" cy="5" r="1.5" />
-        <circle cx="11" cy="13" r="2" />
-        <path d="m6.8 6 4.7-.7M6.2 7.6l3.6 3.8" />
-      </>
-    ),
     reader: <path d="M3 3.5h12v11H3zM10.5 3.5v11" />,
   } as const;
   return (
@@ -110,17 +97,12 @@ export function GraphControls({
   filters,
   readerOpen,
   status,
-  pinnedCount,
-  motionEnabled,
-  motionEligible,
   compact,
   onOverview,
   onToggleFocus,
   onDepthChange,
   onToggleFilter,
   onClearFilters,
-  onToggleMotion,
-  onResetLayout,
   onToggleReader,
 }: Props) {
   const [open, setOpen] = useState<PopoverName>();
@@ -219,16 +201,6 @@ export function GraphControls({
             <Icon name="filter" />
             <span className="control-label">Filters</span>
             {activeFilters.length > 0 && <small>{activeFilters.length}</small>}
-          </button>
-          <button
-            aria-controls="layout-popover"
-            aria-expanded={open === "layout"}
-            data-popover-trigger="layout"
-            onClick={() => togglePopover("layout")}
-            type="button"
-          >
-            <Icon name="layout" />
-            <span className="control-label">Layout</span>
           </button>
           <button
             aria-label={readerOpen ? "Hide reader" : "Show reader"}
@@ -349,48 +321,6 @@ export function GraphControls({
               type="button"
             >
               Clear filters
-            </button>
-          </section>
-        )}
-
-        {open === "layout" && (
-          <section
-            aria-label="Graph layout"
-            className="control-popover"
-            id="layout-popover"
-            role="dialog"
-          >
-            <header>
-              <div>
-                <p className="eyebrow">Layout</p>
-                <h2>{layoutLabel(status)}</h2>
-              </div>
-              <button
-                aria-label="Close layout controls"
-                onClick={() => setOpen(undefined)}
-                type="button"
-              >
-                ×
-              </button>
-            </header>
-            <div className="layout-facts">
-              <span>Motion</span>
-              <strong>{motionEnabled ? "On" : "Off"}</strong>
-              <span>Pinned nodes</span>
-              <strong>{pinnedCount}</strong>
-            </div>
-            <button
-              aria-pressed={motionEnabled}
-              className="popover-action"
-              disabled={!motionEligible}
-              onClick={onToggleMotion}
-              title={!motionEligible ? "Focus or filter the graph to enable motion" : undefined}
-              type="button"
-            >
-              Motion {motionEnabled ? "on" : "off"}
-            </button>
-            <button className="popover-action" onClick={onResetLayout} type="button">
-              Reset layout
             </button>
           </section>
         )}
