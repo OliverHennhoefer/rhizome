@@ -6,6 +6,8 @@ source material; the graph is the product.
 Rhizome compiles links, typed frontmatter relationships, source ranges, backlinks, communities,
 and deterministic coordinates into a static browser application. Notes are fetched only when
 selected. One focused 2D interface handles graph exploration, filtering, and directional analysis.
+Small projections gain a bounded, cooling motion pass after their first static paint; large graphs
+stay deterministic and static until focus or filters make motion sensible.
 
 ## Publish your vault
 
@@ -91,7 +93,8 @@ src/app/                  projection, URL state, Sigma, reader, controls
 
 The browser receives `data/graph.json` at startup. Every node points to one content-hashed details
 artifact containing sanitized HTML and exact relationship evidence. Markdown parsing and layout
-code never enter the browser bundle.
+compilation never enter the browser bundle. The small `d3-force` motion chunk loads lazily only for
+eligible graphs and explicit motion preferences.
 
 Raw HTML, math, Mermaid, transclusion, non-image media embeds, Canvas, Bases, full-text search,
 editing, authentication, collaboration, and arbitrary graph queries are deliberately outside v1.
