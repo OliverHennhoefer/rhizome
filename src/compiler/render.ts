@@ -2,6 +2,7 @@ import path from "node:path";
 import rehypeObsidian from "@quartz-community/rehype-obsidian";
 import type { Element, Root as HastRoot, Text } from "hast";
 import type { Link, Parent, Root, RootContent } from "mdast";
+import rehypeKatex from "rehype-katex";
 import rehypeSanitize, { defaultSchema, type Options as SanitizeOptions } from "rehype-sanitize";
 import rehypeStringify from "rehype-stringify";
 import remarkRehype from "remark-rehype";
@@ -156,6 +157,7 @@ export async function renderNote(
     attributes: {
       ...defaultSchema.attributes,
       a: [...(defaultSchema.attributes?.a ?? []), "target", "rel"],
+      code: [["className", /^language-./, "math-inline", "math-display"]],
       blockquote: [
         ...(defaultSchema.attributes?.blockquote ?? []),
         ["className", /^callout(?:-[\w-]+)?$/],
@@ -176,6 +178,7 @@ export async function renderNote(
     .use(() => externalLinkSafety)
     .use(() => annotateCalloutTitles)
     .use(rehypeSanitize, sanitizeSchema)
+    .use(rehypeKatex)
     .use(rehypeStringify);
   const hast = (await processor.run(rewriteAst(note, index, media))) as HastRoot;
   return processor.stringify(hast);

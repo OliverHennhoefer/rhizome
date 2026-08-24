@@ -68,6 +68,34 @@ describe("vault compiler", () => {
     expect(details.outgoing.every((item) => item.excerpt.length <= 240)).toBe(true);
   });
 
+  it("renders sanitized inline and display math without requiring browser JavaScript", async () => {
+    const root = await fixture({
+      "Math.md": String.raw`# Math
+
+Inline math uses $x^2 + y^2$.
+
+$$
+\operatorname{softmax}(z_i) = \frac{e^{z_i}}{\sum_j e^{z_j}}
+$$
+
+Malformed surrounding Markdown stays readable: $x + y.
+
+[unsafe](javascript:alert(1))
+`,
+    });
+    const result = await new VaultCompiler({ projectRoot: root }).clean();
+    const manifest = manifestFrom(result.assets);
+    const math = manifest.nodes.find((node) => node.id === "Math");
+    const details = JSON.parse(String(result.assets.get(math?.detailsRef ?? ""))) as NodeDetails;
+
+    expect(details.html).toContain('class="katex"');
+    expect(details.html).toContain('class="katex-display"');
+    expect(details.html).toContain("<math");
+    expect(details.html).toContain("Malformed surrounding Markdown stays readable");
+    expect(details.html).not.toContain("javascript:");
+    expect(details.html).not.toContain("<script");
+  });
+
   it("treats missing links as nodes and ambiguous links as fatal", async () => {
     const missingRoot = await fixture({ "A.md": "# A\n\n[[Absent]]\n" });
     const missing = manifestFrom(
@@ -116,5 +144,44 @@ describe("vault compiler", () => {
     expect(manifest.nodes.some((node) => node.kind === "missing" && node.title === "Draft")).toBe(
       true,
     );
+  });
+
+  it("keeps the demonstration vault resolved, connected, and reachable from the LLM", async () => {
+    const result = await new VaultCompiler({ projectRoot: path.resolve(".") }).clean();
+    const manifest = manifestFrom(result.assets);
+    const notes = manifest.nodes.filter((node) => node.kind === "note");
+    const internalEdges = manifest.edges.filter(
+      (edge) => !edge.source.startsWith("external:") && !edge.target.startsWith("external:"),
+    );
+
+    expect(notes).toHaveLength(92);
+    expect(manifest.nodes.some((node) => node.kind === "missing")).toBe(false);
+    expect(manifest.diagnostics).toEqual([]);
+    expect(internalEdges.length).toBeGreaterThanOrEqual(250);
+    expect(internalEdges.length).toBeLessThanOrEqual(350);
+    expect(notes.every((node) => node.degree > 0)).toBe(true);
+
+    const outgoing = new Map<string, string[]>();
+    for (const edge of manifest.edges) {
+      const targets = outgoing.get(edge.source) ?? [];
+      targets.push(edge.target);
+      outgoing.set(edge.source, targets);
+    }
+    const reachable = new Set(["Modern large language model"]);
+    const queue = [...reachable];
+    while (queue.length) {
+      for (const target of outgoing.get(queue.shift() ?? "") ?? []) {
+        if (reachable.has(target)) continue;
+        reachable.add(target);
+        queue.push(target);
+      }
+    }
+
+    expect(
+      notes
+        .filter((node) => !node.types.includes("map"))
+        .filter((node) => !reachable.has(node.id))
+        .map((node) => node.id),
+    ).toEqual([]);
   });
 });

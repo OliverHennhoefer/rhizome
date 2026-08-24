@@ -5,18 +5,39 @@ test("selects notes, restores query state, and loads details lazily", async ({ p
   page.on("request", (request) => {
     if (request.url().includes("/data/details/")) detailsRequests += 1;
   });
-  await page.goto("?note=Event%20model&focus=1&direction=in&depth=2");
+  await page.goto(
+    "?note=Foundations%2FLinear%20algebra%2FMatrix%20multiplication&focus=1&direction=in&depth=2",
+  );
   await expect(
-    page.getByTestId("reader").getByRole("heading", { name: "Event model" }),
+    page.getByTestId("reader").getByRole("heading", { name: "Matrix multiplication" }),
   ).toBeVisible();
   await expect(page).toHaveURL(/focus=1/);
   await expect(page).toHaveURL(/direction=in/);
   expect(detailsRequests).toBeLessThanOrEqual(2);
-  await page.getByLabel("Search notes").fill("projection");
-  await page.getByRole("button", { name: /Graph projection/ }).click();
+  await page.getByLabel("Search notes").fill("scaled dot");
+  await page
+    .locator(".search-results")
+    .getByRole("button", { name: /Scaled dot-product attention/ })
+    .click();
   await expect(
-    page.getByTestId("reader").getByRole("heading", { name: "Graph projection" }),
+    page.getByTestId("reader").getByRole("heading", { name: "Scaled dot-product attention" }),
   ).toBeVisible();
+  await expect(page.getByTestId("reader").locator(".katex-display")).toBeVisible();
+  await expect(page.getByTestId("reader").locator("math").first()).toBeAttached();
+  await page.evaluate(async () => {
+    const browserDocument = (
+      globalThis as unknown as { document: { fonts: { ready: Promise<unknown> } } }
+    ).document;
+    await browserDocument.fonts.ready;
+  });
+  expect(
+    await page.evaluate(() => {
+      const browserDocument = (
+        globalThis as unknown as { document: { fonts: { check(value: string): boolean } } }
+      ).document;
+      return browserDocument.fonts.check("16px KaTeX_Main");
+    }),
+  ).toBe(true);
 });
 
 test("renders the analytical graph without a renderer switch", async ({ page }) => {
@@ -33,16 +54,16 @@ test("clears hover state when a focused projection removes the hovered node", as
   test.skip(testInfo.project.name !== "root", "root desktop project only");
   await page.goto("");
   const graph = page.getByTestId("graph-2d");
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
-  await page.getByLabel("Search notes").fill("graph projection");
-  await page.getByRole("button", { name: /Graph projection/ }).click();
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
+  await page.getByLabel("Search notes").fill("subword tokenization");
+  await page.getByRole("button", { name: /Subword tokenization/ }).click();
   await page.waitForTimeout(350);
 
   const bounds = await graph.boundingBox();
   expect(bounds).not.toBeNull();
   if (!bounds) return;
   await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
-  await expect(graph).toHaveAttribute("data-hovered-node", "Graph projection");
+  await expect(graph).toHaveAttribute("data-hovered-node", "Language/Subword tokenization");
 
   await page
     .getByRole("button", { name: "Focus" })
@@ -50,16 +71,14 @@ test("clears hover state when a focused projection removes the hovered node", as
   await page
     .getByRole("button", { name: "What depends on this?" })
     .evaluate((element) => (element as unknown as { click(): void }).click());
-  await expect(graph).toHaveAttribute("data-hovered-node", "Graph projection");
-  await expect(graph).toHaveAttribute("data-hovered-neighbor-count", "0");
+  await expect(graph).toHaveAttribute("data-hovered-node", "Language/Subword tokenization");
+  await expect(graph).toHaveAttribute("data-hovered-neighbor-count", "1");
 
-  await page.getByLabel("Search notes").fill("event model");
+  await page.getByLabel("Search notes").fill("adamw");
   await page
-    .getByRole("button", { name: /Event model/ })
+    .getByRole("button", { name: /AdamW/ })
     .evaluate((element) => (element as unknown as { click(): void }).click());
-  await expect(
-    page.getByTestId("reader").getByRole("heading", { name: "Event model" }),
-  ).toBeVisible();
+  await expect(page.getByTestId("reader").getByRole("heading", { name: "AdamW" })).toBeVisible();
   await expect(graph).not.toHaveAttribute("data-hovered-node", /.+/);
   await expect(graph).not.toHaveAttribute("data-hovered-neighbor-count", /.+/);
 });
@@ -68,17 +87,17 @@ test("recomputes retained hover neighbors after relation filtering", async ({ pa
   test.skip(testInfo.project.name !== "root", "root desktop project only");
   await page.goto("");
   const graph = page.getByTestId("graph-2d");
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
-  await page.getByLabel("Search notes").fill("graph projection");
-  await page.getByRole("button", { name: /Graph projection/ }).click();
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
+  await page.getByLabel("Search notes").fill("subword tokenization");
+  await page.getByRole("button", { name: /Subword tokenization/ }).click();
   await page.waitForTimeout(350);
 
   const bounds = await graph.boundingBox();
   expect(bounds).not.toBeNull();
   if (!bounds) return;
   await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
-  await expect(graph).toHaveAttribute("data-hovered-node", "Graph projection");
-  await expect(graph).toHaveAttribute("data-hovered-neighbor-count", "1");
+  await expect(graph).toHaveAttribute("data-hovered-node", "Language/Subword tokenization");
+  await expect(graph).toHaveAttribute("data-hovered-neighbor-count", "3");
 
   await page
     .getByRole("button", { name: "Filters" })
@@ -90,20 +109,20 @@ test("recomputes retained hover neighbors after relation filtering", async ({ pa
   await relations
     .getByRole("checkbox", { name: "link", exact: true })
     .evaluate((element) => (element as unknown as { click(): void }).click());
-  await expect(graph).toHaveAttribute("data-hovered-node", "Graph projection");
-  await expect(graph).toHaveAttribute("data-hovered-neighbor-count", "0");
+  await expect(graph).toHaveAttribute("data-hovered-node", "Language/Subword tokenization");
+  await expect(graph).toHaveAttribute("data-hovered-neighbor-count", "2");
 });
 
 test("selection-only navigation does not reheat the settled graph", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "root", "root desktop project only");
   await page.goto("");
   const graph = page.getByTestId("graph-2d");
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
 
-  await page.getByLabel("Search notes").fill("event model");
+  await page.getByLabel("Search notes").fill("matrix multiplication");
   await page
     .locator(".search-results")
-    .getByRole("button", { name: /Event model/ })
+    .getByRole("button", { name: /Matrix multiplication/ })
     .click();
   const statuses: Array<string | null> = [];
   for (let sample = 0; sample < 10; sample += 1) {
@@ -119,7 +138,7 @@ test("runs bounded motion, pauses, resumes, and resets", async ({ page }, testIn
   test.skip(testInfo.project.name !== "root", "root desktop project only");
   await page.goto("");
   const graph = page.getByTestId("graph-2d");
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
 
   await page.getByRole("button", { name: "Layout" }).click();
   await page.getByRole("button", { name: "Motion on" }).click();
@@ -134,17 +153,17 @@ test("runs bounded motion, pauses, resumes, and resets", async ({ page }, testIn
   await expect(page.getByRole("button", { name: "Motion off" })).toBeVisible();
 
   await page.getByRole("button", { name: "Motion off" }).click();
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
   await page.getByRole("button", { name: "Reset layout" }).click();
   await expect(graph).toHaveAttribute("data-pinned-count", "0");
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
 });
 
 test("nudges live while zooming and ignores pure camera panning", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "root", "root desktop project only");
   await page.goto("");
   const graph = page.getByTestId("graph-2d");
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
   await expect(graph).toHaveAttribute("data-nudge-status", "idle");
 
   const bounds = await graph.boundingBox();
@@ -154,7 +173,7 @@ test("nudges live while zooming and ignores pure camera panning", async ({ page 
   await page.mouse.wheel(0, 700);
   await expect(graph).toHaveAttribute("data-nudge-status", "active");
   await expect(graph).toHaveAttribute("data-layout-status", "running");
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
   await expect(graph).toHaveAttribute("data-nudge-status", "idle");
 
   await page.mouse.move(bounds.x + 24, bounds.y + 24);
@@ -187,7 +206,7 @@ test("does not load D3 by default under reduced motion", async ({ page }, testIn
   await page.getByRole("button", { name: "Motion off" }).click();
   await expect.poll(() => d3Requests.length).toBeGreaterThan(0);
   await expect.poll(() => bboxRequests.length).toBeGreaterThan(0);
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
   await expect(graph).toHaveAttribute("data-nudge-status", "disabled");
 });
 
@@ -195,9 +214,9 @@ test("shift-drag pins and normal drag releases a node", async ({ page }, testInf
   test.skip(testInfo.project.name !== "root", "root desktop project only");
   await page.goto("");
   const graph = page.getByTestId("graph-2d");
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
-  await page.getByLabel("Search notes").fill("graph projection");
-  await page.getByRole("button", { name: /Graph projection/ }).click();
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
+  await page.getByLabel("Search notes").fill("subword tokenization");
+  await page.getByRole("button", { name: /Subword tokenization/ }).click();
   await page.waitForTimeout(350);
 
   const bounds = await graph.boundingBox();
@@ -208,19 +227,19 @@ test("shift-drag pins and normal drag releases a node", async ({ page }, testInf
 
   await page.keyboard.down("Shift");
   await page.mouse.move(x, y);
-  await expect(graph).toHaveAttribute("data-hovered-node", "Graph projection");
-  await expect(graph).toHaveAttribute("data-hovered-neighbor-count", "1");
+  await expect(graph).toHaveAttribute("data-hovered-node", "Language/Subword tokenization");
+  await expect(graph).toHaveAttribute("data-hovered-neighbor-count", "3");
   await page.mouse.down();
   await page.mouse.move(x + 60, y + 20, { steps: 5 });
   await page.mouse.up();
   await page.keyboard.up("Shift");
   await expect(graph).toHaveAttribute("data-pinned-count", "1");
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
 
-  await page.getByLabel("Search notes").fill("event model");
-  await page.getByRole("button", { name: /Event model/ }).click();
-  await page.getByLabel("Search notes").fill("graph projection");
-  await page.getByRole("button", { name: /Graph projection/ }).click();
+  await page.getByLabel("Search notes").fill("adamw");
+  await page.getByRole("button", { name: /AdamW/ }).click();
+  await page.getByLabel("Search notes").fill("subword tokenization");
+  await page.getByRole("button", { name: /Subword tokenization/ }).click();
   await page.waitForTimeout(350);
   await page.mouse.move(x, y);
   await page.mouse.down();
@@ -272,9 +291,9 @@ test("toggles directional focus and returns to a filtered fitted overview", asyn
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "root", "root desktop project only");
-  await page.goto("?note=Event%20model");
+  await page.goto("?note=Foundations%2FArithmetic%2FMultiplication");
   const graph = page.getByTestId("graph-2d");
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
 
   await page.getByRole("button", { name: "Filters" }).click();
   const relations = page.locator("details.filter-group").filter({ hasText: "Relations" });
@@ -312,11 +331,11 @@ test("hides, restores, and resizes the reader independently from selection", asy
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "root", "root desktop project only");
-  await page.goto("?note=Cache%20invalidation");
+  await page.goto("?note=Learning%2FAdamW");
   const graph = page.getByTestId("graph-2d");
   const reader = page.getByTestId("reader");
   const separator = page.getByRole("separator", { name: "Resize reader" });
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
   await expect(reader).toBeVisible();
   await expect(separator).toHaveAttribute("aria-valuenow", "420");
   const cameraRatio = await graph.getAttribute("data-camera-ratio");
@@ -344,7 +363,7 @@ test("hides, restores, and resizes the reader independently from selection", asy
 
   await page.getByRole("button", { name: "Close reader" }).click();
   await expect(reader).toHaveCount(0);
-  await expect(page).toHaveURL(/note=Cache(?:\+|%20)invalidation/);
+  await expect(page).toHaveURL(/note=Learning%2FAdamW/);
   await expect(page.getByRole("button", { name: "Show reader" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Show reader" })).toBeFocused();
   await page.getByRole("button", { name: "Show reader" }).click();
@@ -356,22 +375,25 @@ test("formats relationships as directional rows with collapsed source evidence",
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "root", "root desktop project only");
-  await page.goto("?note=Cache%20invalidation");
+  await page.goto("?note=Learning%2FAdamW");
   const relationships = page.getByTestId("reader").locator(".relationships");
-  await expect(relationships.getByRole("heading", { name: "Relationships" })).toBeVisible();
+  await expect(relationships.getByRole("heading", { name: "Relationships" })).toBeVisible({
+    timeout: 15_000,
+  });
 
-  const external = relationships.locator(".relationship").filter({ hasText: "martinfowler.com" });
+  const external = relationships.locator(".relationship").filter({ hasText: "arxiv.org" });
   await expect(external).toContainText("Supported by");
-  await expect(external).toContainText("bliki/TwoHardThings.html");
+  await expect(external).toContainText("abs/1711.05101");
   await expect(external.getByText("external", { exact: true })).toBeVisible();
   const evidence = external.getByRole("button", { name: "1 source" });
   await expect(evidence).toHaveAttribute("aria-expanded", "false");
   await evidence.click();
   await expect(external.getByText("Property:")).toContainText("supported-by");
-  await expect(external.getByText("Cache invalidation.md:12")).toBeVisible();
-  await expect(
-    external.getByRole("link", { name: "Open martinfowler.com in a new tab" }),
-  ).toHaveAttribute("href", "https://martinfowler.com/bliki/TwoHardThings.html");
+  await expect(external.getByText("Learning/AdamW.md:11")).toBeVisible();
+  await expect(external.getByRole("link", { name: "Open arxiv.org in a new tab" })).toHaveAttribute(
+    "href",
+    "https://arxiv.org/abs/1711.05101",
+  );
 });
 
 test("closes graph popovers with Escape and restores trigger focus", async ({ page }, testInfo) => {
@@ -401,7 +423,7 @@ test("matches the graph-first desktop chrome", async ({ page }, testInfo) => {
     maxDiffPixelRatio: 0.001,
   });
 
-  await page.goto("?note=Cache%20invalidation");
+  await page.goto("?note=Learning%2FAdamW");
   await expect(page.getByTestId("reader")).toBeVisible();
   await page.addStyleTag({
     content: ".graph-canvas canvas { visibility: hidden !important; }",
@@ -419,20 +441,18 @@ test("retains DOM navigation when WebGL is unavailable", async ({ page }, testIn
   );
   await page.goto("");
   await expect(page.getByText("Graph rendering unavailable")).toBeVisible();
-  await page.getByLabel("Search notes").fill("projection");
-  await page.getByRole("button", { name: /Graph projection/ }).click();
+  await page.getByLabel("Search notes").fill("scaled dot");
+  await page.getByRole("button", { name: /Scaled dot-product attention/ }).click();
   await expect(
-    page.getByTestId("reader").getByRole("heading", { name: "Graph projection" }),
+    page.getByTestId("reader").getByRole("heading", { name: "Scaled dot-product attention" }),
   ).toBeVisible();
 });
 
 test("mobile retains search and reader navigation", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-reader", "mobile project only");
-  await page.goto("?note=Cache%20invalidation");
+  await page.goto("?note=Learning%2FAdamW");
   await expect(page.getByLabel("Search notes")).toBeVisible();
-  await expect(
-    page.getByTestId("reader").getByRole("heading", { name: "Cache invalidation" }),
-  ).toBeVisible();
+  await expect(page.getByTestId("reader").getByRole("heading", { name: "AdamW" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Relationships" })).toBeVisible();
   const separator = page.getByRole("separator", { name: "Resize reader" });
   await expect(separator).toHaveAttribute("aria-orientation", "horizontal");
@@ -460,7 +480,7 @@ test("matches the mobile reader chrome", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-reader", "mobile project only");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.addInitScript(() => localStorage.setItem("rhizome:motion", "off"));
-  await page.goto("?note=Cache%20invalidation");
+  await page.goto("?note=Learning%2FAdamW");
   await expect(page.getByTestId("graph-2d")).toBeVisible();
   await expect(page.getByTestId("reader")).toBeVisible();
   await page.addStyleTag({

@@ -18,6 +18,7 @@ Markdown repository → GitHub Actions → graph-native GitHub Pages site
 - Answers “what depends on this?” and “what does this depend on?” through bounded focus views.
 - Produces deterministic layouts, with optional cooling motion for small projections.
 - Loads the graph once and fetches note bodies only when selected.
+- Renders inline and display math at build time with locally bundled KaTeX.
 - Publishes as static assets under both root and repository GitHub Pages paths.
 
 Markdown remains portable and editable in Obsidian, GitHub, or any text editor. Nested folders are
@@ -39,13 +40,14 @@ Only configured top-level Properties become typed edges. Other frontmatter remai
 
 ```yaml
 ---
-title: Cache invalidation
-types: [concept]
-tags: [architecture]
+title: Scaled dot-product attention
+types: [mechanism]
+tags: [attention, transformer]
 depends-on:
-  - "[[Event model]]"
+  - "[[Attention]]"
+  - "[[Matrix multiplication]]"
 supported-by:
-  - https://example.com/paper
+  - https://arxiv.org/abs/1706.03762
 ---
 ```
 

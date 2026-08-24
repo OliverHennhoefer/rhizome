@@ -4,6 +4,7 @@ import remarkObsidian from "@quartz-community/remark-obsidian";
 import type { Root, RootContent } from "mdast";
 import remarkFrontmatter from "remark-frontmatter";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
@@ -32,6 +33,7 @@ const markdownProcessor = unified()
   .use(remarkParse)
   .use(remarkGfm)
   .use(remarkFrontmatter, ["yaml"])
+  .use(remarkMath)
   .use(remarkObsidian, {
     wikilinks: true,
     highlights: true,
