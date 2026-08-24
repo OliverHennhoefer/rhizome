@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { GraphManifest } from "../shared/contracts";
 import { Graph2D } from "./Graph2D";
 import { createGraph, projectGraph } from "./graph";
+import { relationTone } from "./graph-theme";
 import { Reader } from "./Reader";
 import { readUrlState, type UrlState, writeUrlState } from "./url-state";
 
@@ -238,7 +239,7 @@ export function App() {
         <section className="legend">
           {relationNames.map((relation) => (
             <span key={relation}>
-              <i style={{ background: manifest.config.relations[relation]?.color ?? "#667166" }} />
+              <i style={{ background: relationTone(relation) }} />
               {manifest.config.relations[relation]?.label ?? relation}
             </span>
           ))}
@@ -252,13 +253,7 @@ export function App() {
             <p>Search and relationship navigation remain available in this browser.</p>
           </div>
         ) : (
-          <Graph2D
-            graph={graph}
-            manifest={manifest}
-            projection={projection}
-            selected={state.note}
-            onSelect={select}
-          />
+          <Graph2D graph={graph} projection={projection} selected={state.note} onSelect={select} />
         )}
         <div className="stage-hint">
           {state.focus

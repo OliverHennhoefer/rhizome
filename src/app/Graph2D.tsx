@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import type { GraphManifest } from "../shared/contracts";
 import type { GraphProjection, RhizomeGraph } from "./graph";
 import { isMotionEligible, type LayoutStatus } from "./graph-layout";
 import { GraphViewportSession } from "./graph-viewport";
 
 interface Props {
   graph: RhizomeGraph;
-  manifest: GraphManifest;
   projection: GraphProjection;
   selected?: string;
   onSelect: (id: string) => void;
@@ -58,7 +56,7 @@ function layoutLabel(status: LayoutStatus): string {
   }
 }
 
-export function Graph2D({ graph, manifest, projection, selected, onSelect }: Props) {
+export function Graph2D({ graph, projection, selected, onSelect }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const session = useRef<GraphViewportSession | undefined>(undefined);
   const compact = useMediaQuery("(pointer: coarse), (max-width: 720px)");
@@ -85,22 +83,13 @@ export function Graph2D({ graph, manifest, projection, selected, onSelect }: Pro
   useEffect(() => {
     session.current?.sync({
       projection,
-      relations: manifest.config.relations,
       selected,
       motionEnabled,
       compact,
       reducedMotion,
       onSelect,
     });
-  }, [
-    compact,
-    manifest.config.relations,
-    motionEnabled,
-    onSelect,
-    projection,
-    reducedMotion,
-    selected,
-  ]);
+  }, [compact, motionEnabled, onSelect, projection, reducedMotion, selected]);
 
   const toggleMotion = () => {
     const next = !motionEnabled;

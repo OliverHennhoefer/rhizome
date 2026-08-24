@@ -1,12 +1,12 @@
 import Sigma from "sigma";
 import {
   createEdgeArrowProgram,
-  drawDiscNodeHover,
   EdgeLineProgram,
   type EdgeProgramType,
   type NodeHoverDrawingFunction,
+  type NodeLabelDrawingFunction,
 } from "sigma/rendering";
-import type { GraphNode, PublicConfig } from "../shared/contracts";
+import type { GraphNode } from "../shared/contracts";
 import {
   type GraphProjection,
   neighborsOf,
@@ -23,10 +23,10 @@ import {
   nodeColorWithAlpha,
   nodeRadius,
 } from "./graph-layout";
+import { COMMUNITY_TONES, relationTone } from "./graph-theme";
 
 export interface GraphViewportSnapshot {
   projection: GraphProjection;
-  relations: PublicConfig["relations"];
   selected?: string;
   motionEnabled: boolean;
   compact: boolean;
@@ -48,7 +48,6 @@ interface DragState {
   startY: number;
 }
 
-const palette = ["#d97757", "#6e9f73", "#4f8fba", "#b887d4", "#d6a74b", "#58a6a6"];
 const edgePrograms = {
   arrow: createEdgeArrowProgram<GraphNode, RuntimeGraphEdge>(),
   line: EdgeLineProgram as EdgeProgramType<GraphNode, RuntimeGraphEdge>,
@@ -80,33 +79,58 @@ export class GraphViewportSession {
     this.positions = new GraphPositionStore(sourceGraph);
     this.displayGraph = sourceGraph.nullCopy();
 
-    const drawHover: NodeHoverDrawingFunction<GraphNode, RuntimeGraphEdge> = (
-      context,
-      data,
-      settings,
-    ) => {
+    const drawHover: NodeHoverDrawingFunction<GraphNode, RuntimeGraphEdge> = (context, data) => {
       const key = (data as typeof data & { key?: string }).key;
       if (key && this.positions.isPinned(key)) {
         context.beginPath();
         context.arc(data.x, data.y, data.size + 4, 0, Math.PI * 2);
-        context.strokeStyle = "#f4d35ecc";
-        context.lineWidth = 2;
+        context.strokeStyle = "#8e8e93";
+        context.lineWidth = 1.5;
         context.stroke();
       }
-      if (key === this.hovered) drawDiscNodeHover(context, data, settings);
+      if (key === this.hovered) {
+        context.beginPath();
+        context.arc(data.x, data.y, data.size + 5, 0, Math.PI * 2);
+        context.strokeStyle = "#f5f5f7";
+        context.lineWidth = 1.5;
+        context.stroke();
+      }
+    };
+
+    const drawLabel: NodeLabelDrawingFunction<GraphNode, RuntimeGraphEdge> = (
+      context,
+      data,
+      settings,
+    ) => {
+      if (!data.label) return;
+      const x = data.x + data.size + 5;
+      context.save();
+      context.font = `${settings.labelWeight} ${settings.labelSize}px ${settings.labelFont}`;
+      context.textBaseline = "middle";
+      context.lineJoin = "round";
+      context.strokeStyle = "rgba(0, 0, 0, 0.92)";
+      context.lineWidth = 4;
+      context.strokeText(data.label, x, data.y);
+      context.fillStyle = "#f5f5f7";
+      context.fillText(data.label, x, data.y);
+      context.restore();
     };
 
     this.renderer = new Sigma<GraphNode, RuntimeGraphEdge>(this.displayGraph, container, {
       allowInvalidContainer: false,
+      defaultDrawNodeLabel: drawLabel,
       defaultDrawNodeHover: drawHover,
-      defaultNodeColor: "#77927b",
-      defaultEdgeColor: "#596059",
+      defaultNodeColor: "#aeaeb2",
+      defaultEdgeColor: "#48484a",
       edgeProgramClasses: edgePrograms,
       hideEdgesOnMove: true,
-      labelColor: { color: "#e9eee8" },
+      labelColor: { color: "#f5f5f7" },
       labelDensity: 0.08,
+      labelFont: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif',
       labelGridCellSize: 120,
       labelRenderedSizeThreshold: 8,
+      labelSize: 12,
+      labelWeight: "500",
       renderEdgeLabels: false,
       zIndex: true,
     });
@@ -124,10 +148,10 @@ export class GraphViewportSession {
     const hoverRelated = !this.hovered || isHovered || isHoverNeighbor;
     const community = Number(data.community ?? 0);
     const color = isSelected
-      ? "#f4d35e"
+      ? "#ffffff"
       : isSelectedNeighbor
-        ? "#a5c9a8"
-        : palette[Math.abs(community) % palette.length];
+        ? "#c7c7cc"
+        : COMMUNITY_TONES[Math.abs(community) % COMMUNITY_TONES.length];
     const size = isSelected ? 13 : nodeRadius(data);
     return {
       ...data,
@@ -145,8 +169,7 @@ export class GraphViewportSession {
       this.selected && (data.source === this.selected || data.target === this.selected);
     const hoverActive =
       this.hovered && (data.source === this.hovered || data.target === this.hovered);
-    const relation = this.snapshot?.relations[data.relationType];
-    const color = relation?.color ?? (data.relationType === "link" ? "#829184" : "#667166");
+    const color = relationTone(data.relationType);
     const active = this.hovered ? hoverActive : selectedActive;
     return {
       ...data,
@@ -368,7 +391,6 @@ export class GraphViewportSession {
       !previous ||
       previous.motionEnabled !== next.motionEnabled ||
       previousEligible !== nextEligible;
-    const relationsChanged = previous?.relations !== next.relations;
 
     this.snapshot = next;
     this.selected = next.selected;
@@ -390,7 +412,7 @@ export class GraphViewportSession {
       this.startMotion();
     }
 
-    if (!projectionChanged && (selectionChanged || relationsChanged)) this.renderer.refresh();
+    if (!projectionChanged && selectionChanged) this.renderer.refresh();
     if (previous && selectionChanged && next.selected && this.displayGraph.hasNode(next.selected)) {
       this.centerSelection(next.selected);
     }
