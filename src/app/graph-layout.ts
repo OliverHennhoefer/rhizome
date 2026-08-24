@@ -18,17 +18,18 @@ export const DESKTOP_MOTION_LIMITS: MotionLimits = { nodes: 600, edges: 4_000 };
 export const COMPACT_MOTION_LIMITS: MotionLimits = { nodes: 200, edges: 1_000 };
 
 export const FORCE_SETTINGS = {
-  anchorStrength: 0.075,
-  centerStrength: 0.01,
-  charge: -20,
-  initialAlpha: 0.22,
-  alphaDecay: 0.09,
-  alphaMin: 0.02,
+  anchorStrength: 0.025,
+  centerStrength: 0.006,
+  charge: -32,
+  initialAlpha: 0.48,
+  alphaDecay: 0.022,
+  alphaMin: 0.01,
   collisionIterations: 1,
-  dragAlpha: 0.16,
-  dragAlphaTarget: 0.09,
-  maxAutomaticDisplacement: 14,
-  velocityDecay: 0.5,
+  dragAlpha: 0.28,
+  dragAlphaTarget: 0.12,
+  linkDistance: 42,
+  maxAutomaticDisplacement: 30,
+  velocityDecay: 0.34,
 } as const;
 
 export interface PhysicalLink {
@@ -217,18 +218,7 @@ export function buildPhysicalLinks(graph: RhizomeGraph): PhysicalLink[] {
 }
 
 export function physicalLinkStrength(occurrences: number): number {
-  return Math.min(0.09, 0.035 + Math.log1p(Math.max(1, occurrences)) * 0.012);
-}
-
-function physicalLinkDistance(link: LayoutLink): number {
-  if (typeof link.source === "string" || typeof link.target === "string") return 28;
-  return Math.max(
-    18,
-    Math.min(
-      72,
-      Math.hypot(link.source.baseX - link.target.baseX, link.source.baseY - link.target.baseY),
-    ),
-  );
+  return Math.min(0.16, 0.055 + Math.log1p(Math.max(1, occurrences)) * 0.02);
 }
 
 function seededRandom(seed: string): () => number {
@@ -296,11 +286,11 @@ export class GraphMotionController {
     const linkForce = d3
       .forceLink<LayoutNode, LayoutLink>(links)
       .id((node) => node.id)
-      .distance(physicalLinkDistance)
+      .distance(FORCE_SETTINGS.linkDistance)
       .strength((link) => physicalLinkStrength(link.occurrences));
     const collisionForce = d3
-      .forceCollide<LayoutNode>((node) => Math.min(7, 3.5 + Math.sqrt(node.degree) * 0.6))
-      .strength(0.7)
+      .forceCollide<LayoutNode>((node) => Math.min(10.5, 4.5 + Math.sqrt(node.degree) * 0.75))
+      .strength(0.72)
       .iterations(FORCE_SETTINGS.collisionIterations);
 
     this.simulation = d3

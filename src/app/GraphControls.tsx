@@ -47,7 +47,7 @@ function layoutLabel(status: LayoutStatus): string {
     case "loading":
       return "Preparing motion";
     case "running":
-      return "Graph in motion";
+      return "Graph relaxing";
     case "settled":
       return "Graph settled";
     case "paused":

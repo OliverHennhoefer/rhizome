@@ -8,6 +8,7 @@ import {
 import {
   buildPhysicalLinks,
   createDisplayGraph,
+  FORCE_SETTINGS,
   GraphMotionController,
   GraphPositionStore,
   isMotionEligible,
@@ -157,9 +158,9 @@ describe("display graph", () => {
       { source: "a", target: "b", occurrences: 6 },
       { source: "b", target: "c", occurrences: 1 },
     ]);
-    expect(physicalLinkStrength(1)).toBeGreaterThanOrEqual(0.04);
-    expect(physicalLinkStrength(1)).toBeLessThan(0.06);
-    expect(physicalLinkStrength(1_000_000)).toBe(0.09);
+    expect(physicalLinkStrength(1)).toBeGreaterThan(0.06);
+    expect(physicalLinkStrength(1)).toBeLessThan(0.08);
+    expect(physicalLinkStrength(1_000_000)).toBe(0.16);
   });
 
   it("carries configured relation colors into the runtime graph", () => {
@@ -280,7 +281,7 @@ describe("motion policy and position state", () => {
     controller.advance(200);
     expect(
       Math.hypot(positions.getCurrent("b").x - origin.x, positions.getCurrent("b").y - origin.y),
-    ).toBeLessThanOrEqual(14.000_001);
+    ).toBeLessThanOrEqual(FORCE_SETTINGS.maxAutomaticDisplacement + 0.000_001);
     controller.kill();
   });
 });

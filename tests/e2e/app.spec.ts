@@ -136,10 +136,11 @@ test("selection-only navigation does not reheat the settled graph", async ({ pag
   await expect(graph).toHaveAttribute("data-layout-status", "settled");
 });
 
-test("runs bounded motion automatically without layout controls", async ({ page }, testInfo) => {
+test("relaxes gradually without retaining a perpetual simulation", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "root", "root desktop project only");
   await page.goto("");
   const graph = page.getByTestId("graph-2d");
+  await expect(graph).toHaveAttribute("data-layout-status", "running", { timeout: 5_000 });
   await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
   await expect(page.getByRole("button", { name: "Layout" })).toHaveCount(0);
 });
@@ -186,6 +187,7 @@ test("shift-drag pins, overview resets, and normal drag releases a node", async 
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "root", "root desktop project only");
+  test.setTimeout(75_000);
   await page.goto("");
   const graph = page.getByTestId("graph-2d");
   await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
@@ -320,7 +322,8 @@ test("toggles directional focus and returns to a filtered fitted overview", asyn
   await expect(page).not.toHaveURL(/direction=in/);
   await expect(page).toHaveURL(/relation=link/);
   await expect(graph).toHaveAttribute("data-camera-ratio", "1.0800", { timeout: 2_000 });
-  await expect(graph).toHaveAttribute("data-layout-status", "settled");
+  await expect(graph).toHaveAttribute("data-layout-status", "running");
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
   await expect(page.getByTestId("reader")).toBeVisible();
 });
 
