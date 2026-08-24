@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createGraph, projectGraph } from "../src/app/graph";
+import { createGraph, projectGraph, reconcileProjectedHover } from "../src/app/graph";
+import { createDisplayGraph, GraphPositionStore } from "../src/app/graph-layout";
 import type { GraphManifest } from "../src/shared/contracts";
 
 const manifest: GraphManifest = {
@@ -90,5 +91,26 @@ describe("graph projection", () => {
       depth: 2,
     });
     expect([...outbound.nodes].sort()).toEqual(["a", "b", "c"]);
+  });
+
+  it("clears removed hover state and recomputes retained visible neighbors", () => {
+    const graph = createGraph(manifest);
+    const positions = new GraphPositionStore(graph);
+    const retained = createDisplayGraph(
+      graph,
+      { nodes: new Set(["a", "b"]), edges: new Set(["ab"]) },
+      positions,
+    );
+    expect(reconcileProjectedHover(retained, "b")).toEqual({
+      hovered: "b",
+      neighbors: new Set(["a"]),
+    });
+
+    const removed = createDisplayGraph(
+      graph,
+      { nodes: new Set(["a"]), edges: new Set() },
+      positions,
+    );
+    expect(reconcileProjectedHover(removed, "b")).toEqual({ neighbors: new Set() });
   });
 });
