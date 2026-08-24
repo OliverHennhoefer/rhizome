@@ -18,6 +18,11 @@ export interface Position {
   y: number;
 }
 
+export interface PositionBounds {
+  x: [number, number];
+  y: [number, number];
+}
+
 export interface MotionLimits {
   nodes: number;
   edges: number;
@@ -193,6 +198,42 @@ export function isMotionEligible(projection: GraphProjection, compact: boolean):
   );
 }
 
+export function projectionBaseBounds(
+  projection: GraphProjection,
+  positions: GraphPositionStore,
+): PositionBounds {
+  if (projection.nodes.size === 0) return { x: [0, 1], y: [0, 1] };
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const id of projection.nodes) {
+    const { x, y } = positions.getBase(id);
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+  const pad = (minimum: number, maximum: number): [number, number] => {
+    const padding = Math.max(1, (maximum - minimum) * 0.05);
+    return [minimum - padding, maximum + padding];
+  };
+  return { x: pad(minX, maxX), y: pad(minY, maxY) };
+}
+
+export function clampPositionToRadius(
+  position: Position,
+  origin: Position,
+  radius: number,
+): Position {
+  const deltaX = position.x - origin.x;
+  const deltaY = position.y - origin.y;
+  const distance = Math.hypot(deltaX, deltaY);
+  if (distance <= radius || distance === 0) return { ...position };
+  const scale = radius / distance;
+  return { x: origin.x + deltaX * scale, y: origin.y + deltaY * scale };
+}
+
 export function createDisplayGraph(
   source: RhizomeGraph,
   projection: GraphProjection,
@@ -316,6 +357,7 @@ export class GraphMotionController {
   private nodes = new Map<string, LayoutNode>();
   private activeDrag?: string;
   private releaseNode?: string;
+  private dragOrigin?: Position;
   private dragKinematics?: DragKinematics;
   private interactive = false;
   private killed = false;
@@ -486,6 +528,7 @@ export class GraphMotionController {
   beginDrag(id: string, position: Position, timestamp = performance.now()): void {
     this.releaseNode = undefined;
     this.activeDrag = id;
+    this.dragOrigin = { ...position };
     this.interactive = true;
     this.dragKinematics = {
       lastX: position.x,
@@ -515,11 +558,14 @@ export class GraphMotionController {
   }
 
   moveDrag(id: string, position: Position, timestamp = performance.now()): void {
+    const boundedPosition = this.dragOrigin
+      ? clampPositionToRadius(position, this.dragOrigin, FORCE_SETTINGS.interactiveMaxDisplacement)
+      : position;
     const kinematics = this.dragKinematics;
     if (kinematics && id === this.activeDrag) {
       const elapsed = Math.max(1, Math.min(64, timestamp - kinematics.lastTime));
-      const velocityX = ((position.x - kinematics.lastX) / elapsed) * (1000 / 60);
-      const velocityY = ((position.y - kinematics.lastY) / elapsed) * (1000 / 60);
+      const velocityX = ((boundedPosition.x - kinematics.lastX) / elapsed) * (1000 / 60);
+      const velocityY = ((boundedPosition.y - kinematics.lastY) / elapsed) * (1000 / 60);
       kinematics.velocityX = kinematics.velocityX * 0.35 + velocityX * 0.65;
       kinematics.velocityY = kinematics.velocityY * 0.35 + velocityY * 0.65;
       const speed = Math.hypot(kinematics.velocityX, kinematics.velocityY);
@@ -528,28 +574,27 @@ export class GraphMotionController {
         kinematics.velocityX *= scale;
         kinematics.velocityY *= scale;
       }
-      kinematics.lastX = position.x;
-      kinematics.lastY = position.y;
+      kinematics.lastX = boundedPosition.x;
+      kinematics.lastY = boundedPosition.y;
       kinematics.lastTime = timestamp;
     }
     const node = this.nodes.get(id);
     if (node) {
-      node.motionOriginX = position.x;
-      node.motionOriginY = position.y;
-      node.fx = position.x;
-      node.fy = position.y;
-      node.x = position.x;
-      node.y = position.y;
+      node.fx = boundedPosition.x;
+      node.fy = boundedPosition.y;
+      node.x = boundedPosition.x;
+      node.y = boundedPosition.y;
     }
-    this.positions.setCurrent(id, position);
+    this.positions.setCurrent(id, boundedPosition);
     if (this.graph.hasNode(id)) {
-      this.graph.mergeNodeAttributes(id, position);
+      this.graph.mergeNodeAttributes(id, boundedPosition);
     }
   }
 
   endDrag(id: string, keepPinned: boolean, timestamp = performance.now()): void {
     const node = this.nodes.get(id);
     const position = this.positions.getCurrent(id);
+    const dragOrigin = this.dragOrigin;
     if (keepPinned) {
       this.releaseNode = undefined;
       this.positions.pin(id, position);
@@ -573,11 +618,14 @@ export class GraphMotionController {
       }
     }
     this.activeDrag = undefined;
+    this.dragOrigin = undefined;
     this.dragKinematics = undefined;
     this.nodes.forEach((item) => {
       if (!Number.isFinite(item.x) || !Number.isFinite(item.y)) return;
-      item.motionOriginX = item.x as number;
-      item.motionOriginY = item.y as number;
+      item.motionOriginX =
+        item.id === id && !keepPinned && dragOrigin ? dragOrigin.x : (item.x as number);
+      item.motionOriginY =
+        item.id === id && !keepPinned && dragOrigin ? dragOrigin.y : (item.y as number);
     });
     this.applyLinkStrength();
     this.onPinnedChange();
@@ -628,6 +676,7 @@ export class GraphMotionController {
     this.anchorYForce = undefined;
     this.dragKinematics = undefined;
     this.releaseNode = undefined;
+    this.dragOrigin = undefined;
     this.nodes.clear();
   }
 }
@@ -637,5 +686,6 @@ export function nodeColorWithAlpha(color: string, alpha: string): string {
 }
 
 export function nodeRadius(node: GraphNode): number {
-  return Math.min(9, 3.5 + Math.sqrt(Number(node.degree) || 0) * 0.85);
+  const degree = Math.max(0, Number(node.degree) || 0);
+  return Math.min(10.5, 3.25 + Math.sqrt(degree) * 1.15);
 }

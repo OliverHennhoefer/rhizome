@@ -26,6 +26,7 @@ interface Props {
   searchResults: GraphNode[];
   overviewRevision: number;
   onSelect: (id: string) => void;
+  onClearSelection: () => void;
   onOverview: () => void;
   onClearFocus: () => void;
   onToggleFilter: (key: FilterKey, value: string) => void;
@@ -61,6 +62,7 @@ export function Graph2D({
   searchResults,
   overviewRevision,
   onSelect,
+  onClearSelection,
   onOverview,
   onClearFocus,
   onToggleFilter,
@@ -118,6 +120,7 @@ export function Graph2D({
       forceSettings,
       searchMatches,
       onSelect,
+      onClearSelection,
     });
     if (resetOverview) {
       appliedOverviewRevision.current = overviewRevision;
@@ -128,6 +131,7 @@ export function Graph2D({
     forceSettings,
     focus,
     motionEnabled,
+    onClearSelection,
     onSelect,
     overviewRevision,
     projection,

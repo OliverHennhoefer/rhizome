@@ -14,7 +14,7 @@ import {
   type RuntimeGraphEdge,
   reconcileProjectedHover,
 } from "./graph";
-import { labelLodForRatio, selectPriorityLabels, shouldForceNeighborLabels } from "./graph-labels";
+import { type LabelZoomStyle, labelZoomStyleForRatio } from "./graph-labels";
 import {
   createDisplayGraph,
   type GraphForceSettings,
@@ -24,6 +24,7 @@ import {
   type LayoutStatus,
   nodeColorWithAlpha,
   nodeRadius,
+  projectionBaseBounds,
 } from "./graph-layout";
 import { blendGraphTone, nodeTone } from "./graph-theme";
 
@@ -37,6 +38,7 @@ export interface GraphViewportSnapshot {
   forceSettings: GraphForceSettings;
   searchMatches?: ReadonlySet<string>;
   onSelect: (id: string) => void;
+  onClearSelection: () => void;
 }
 
 interface GraphViewportEvents {
@@ -58,6 +60,7 @@ const edgePrograms = {
   line: EdgeLineProgram as EdgeProgramType<GraphNode, RuntimeGraphEdge>,
 };
 const OVERVIEW_CAMERA_RATIO = 1.08;
+const STAGE_CLICK_GRACE_MS = 24;
 
 export class GraphViewportSession {
   private readonly container: HTMLDivElement;
@@ -70,15 +73,15 @@ export class GraphViewportSession {
   private motion?: GraphMotionController;
   private motionFrame?: number;
   private cameraFrame?: number;
-  private labelDensity = 0.045;
-  private labelThreshold = 5.5;
+  private cameraOperation = 0;
+  private stageClickTimer?: number;
+  private labelZoomStyle: LabelZoomStyle = labelZoomStyleForRatio(OVERVIEW_CAMERA_RATIO);
   private drag?: DragState;
   private hovered?: string;
   private hoverNeighbors = new Set<string>();
   private selected?: string;
   private searchMatches?: ReadonlySet<string>;
   private selectedNeighbors = new Set<string>();
-  private priorityNeighborLabels = new Set<string>();
   private suppressClickUntil = 0;
   private destroyed = false;
 
@@ -112,16 +115,17 @@ export class GraphViewportSession {
       data,
       settings,
     ) => {
-      if (!data.label) return;
-      const x = data.x + data.size + 5;
+      if (!data.label || !this.labelZoomStyle.visible) return;
+      const { opacity, size } = this.labelZoomStyle;
+      const x = data.x + data.size + Math.max(3, size * 0.38);
       context.save();
-      context.font = `${settings.labelWeight} ${settings.labelSize}px ${settings.labelFont}`;
+      context.font = `${settings.labelWeight} ${size}px ${settings.labelFont}`;
       context.textBaseline = "middle";
       context.lineJoin = "round";
-      context.strokeStyle = "rgba(23, 24, 26, 0.94)";
-      context.lineWidth = 4;
+      context.strokeStyle = `rgba(23, 24, 26, ${Math.min(0.94, opacity + 0.18)})`;
+      context.lineWidth = Math.max(2, size * 0.3);
       context.strokeText(data.label, x, data.y);
-      context.fillStyle = "#f5f5f7";
+      context.fillStyle = `rgba(245, 245, 247, ${opacity})`;
       context.fillText(data.label, x, data.y);
       context.restore();
     };
@@ -134,12 +138,11 @@ export class GraphViewportSession {
       defaultEdgeColor: "#73818d",
       edgeProgramClasses: edgePrograms,
       hideEdgesOnMove: true,
-      hideLabelsOnMove: true,
+      hideLabelsOnMove: false,
       labelColor: { color: "#f5f5f7" },
-      labelDensity: 0.045,
+      labelDensity: 1,
       labelFont: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif',
-      labelGridCellSize: 140,
-      labelRenderedSizeThreshold: 5.5,
+      labelRenderedSizeThreshold: 0,
       labelSize: 12,
       labelWeight: "500",
       maxCameraRatio: 4,
@@ -150,44 +153,17 @@ export class GraphViewportSession {
     this.renderer.setSetting("edgeReducer", (_, data) => this.reduceEdge(data));
     this.renderer.getCamera().setState({ x: 0.5, y: 0.5, ratio: OVERVIEW_CAMERA_RATIO, angle: 0 });
     const cameraRatio = this.renderer.getCamera().getState().ratio;
-    this.applyLabelLod(cameraRatio);
+    this.applyLabelZoom(cameraRatio);
     this.container.setAttribute("data-camera-ratio", cameraRatio.toFixed(4));
     this.renderer.getCamera().on("updated", this.handleCameraUpdate);
     this.bindInteractions();
   }
 
   private nodeSize(node: string, data: GraphNode): number {
-    const size = node === this.selected ? 11.5 : nodeRadius(data);
+    const baseSize = nodeRadius(data);
+    const size = node === this.selected ? Math.max(12.5, baseSize + 2) : baseSize;
     const neighborSize = this.selectedNeighbors.has(node) ? size + 0.7 : size;
     return node === this.hovered ? neighborSize + 1.5 : neighborSize;
-  }
-
-  private isPriorityLabel(node: string): boolean {
-    return (
-      node === this.selected ||
-      node === this.hovered ||
-      this.positions.isPinned(node) ||
-      this.priorityNeighborLabels.has(node) ||
-      Boolean(this.searchMatches?.has(node))
-    );
-  }
-
-  private recomputePriorityNeighborLabels(
-    ratio: number = this.renderer.getCamera().getState().ratio,
-  ): boolean {
-    const previous = this.priorityNeighborLabels;
-    this.priorityNeighborLabels = shouldForceNeighborLabels(
-      Boolean(this.snapshot?.focus),
-      this.displayGraph.order,
-      ratio,
-    )
-      ? selectPriorityLabels(this.selectedNeighbors, (id) => {
-          if (!this.displayGraph.hasNode(id)) return 0;
-          return Number(this.displayGraph.getNodeAttribute(id, "degree")) || 0;
-        })
-      : new Set<string>();
-    if (previous.size !== this.priorityNeighborLabels.size) return true;
-    return [...previous].some((id) => !this.priorityNeighborLabels.has(id));
   }
 
   private reduceNode(node: string, data: GraphNode) {
@@ -203,7 +179,7 @@ export class GraphViewportSession {
     const size = this.nodeSize(node, data);
     return {
       ...data,
-      label: !this.searchMatches || isSearchMatch || isSelected ? String(data.title ?? node) : "",
+      label: String(data.title ?? node),
       color:
         hoverRelated && searchRelated
           ? color
@@ -211,7 +187,7 @@ export class GraphViewportSession {
       size: isSearchMatch ? size + 1.2 : size,
       zIndex:
         isSelected || isHovered ? 4 : isPinned || isSearchMatch ? 3 : isSelectedNeighbor ? 2 : 1,
-      forceLabel: this.isPriorityLabel(node),
+      forceLabel: true,
       highlighted: isPinned,
     };
   }
@@ -235,32 +211,37 @@ export class GraphViewportSession {
     };
   }
 
-  private applyLabelLod(ratio: number): void {
-    const lod = labelLodForRatio(ratio);
-    if (Math.abs(lod.density - this.labelDensity) > 0.0001) {
-      this.labelDensity = lod.density;
-      this.renderer.setSetting("labelDensity", lod.density);
-    }
-    if (Math.abs(lod.renderedSizeThreshold - this.labelThreshold) > 0.01) {
-      this.labelThreshold = lod.renderedSizeThreshold;
-      this.renderer.setSetting("labelRenderedSizeThreshold", lod.renderedSizeThreshold);
+  private applyLabelZoom(ratio: number): void {
+    const previousVisibility = this.labelZoomStyle.visible;
+    this.labelZoomStyle = labelZoomStyleForRatio(ratio);
+    this.container.setAttribute(
+      "data-label-visibility",
+      this.labelZoomStyle.visible ? "all" : "none",
+    );
+    this.container.setAttribute("data-label-opacity", this.labelZoomStyle.opacity.toFixed(3));
+    this.container.setAttribute("data-label-size", this.labelZoomStyle.size.toFixed(3));
+    if (previousVisibility !== this.labelZoomStyle.visible) {
+      this.renderer.setSetting("renderLabels", this.labelZoomStyle.visible);
     }
   }
 
   private readonly handleCameraUpdate = (state: { ratio: number }): void => {
     this.container.setAttribute("data-camera-ratio", state.ratio.toFixed(4));
-    this.applyLabelLod(state.ratio);
-    if (this.recomputePriorityNeighborLabels(state.ratio)) this.renderer.refresh();
+    this.applyLabelZoom(state.ratio);
   };
 
   private bindInteractions(): void {
     this.renderer.on("downNode", ({ node, event, preventSigmaDefault }) => {
+      this.cancelStageClick();
       preventSigmaDefault();
       this.beginDrag(node, event);
     });
     this.renderer.on("clickNode", ({ node }) => {
+      this.cancelStageClick();
       if (performance.now() >= this.suppressClickUntil) this.snapshot?.onSelect(node);
     });
+    this.renderer.on("clickStage", () => this.scheduleClearSelection());
+    this.renderer.on("doubleClickStage", () => this.cancelStageClick());
     this.renderer.on("enterNode", ({ node }) => this.setHover(node));
     this.renderer.on("leaveNode", ({ node }) => {
       if (this.hovered === node) this.clearHover();
@@ -281,6 +262,21 @@ export class GraphViewportSession {
       });
     });
     touch.on("touchup", (event) => this.finishDrag(event.original));
+  }
+
+  private cancelStageClick(): void {
+    if (this.stageClickTimer === undefined) return;
+    window.clearTimeout(this.stageClickTimer);
+    this.stageClickTimer = undefined;
+  }
+
+  private scheduleClearSelection(): void {
+    this.cancelStageClick();
+    if (!this.selected) return;
+    this.stageClickTimer = window.setTimeout(() => {
+      this.stageClickTimer = undefined;
+      if (this.selected) this.snapshot?.onClearSelection();
+    }, this.renderer.getSetting("doubleClickTimeout") + STAGE_CLICK_GRACE_MS);
   }
 
   private beginDrag(id: string, event: { x: number; y: number; original: Event }): void {
@@ -383,7 +379,9 @@ export class GraphViewportSession {
       this.selected && nextGraph.hasNode(this.selected)
         ? neighborsOf(nextGraph, this.selected)
         : new Set<string>();
-    this.recomputePriorityNeighborLabels();
+    const normalizationBounds = projectionBaseBounds(projection, this.positions);
+    this.renderer.setCustomBBox(normalizationBounds);
+    this.container.setAttribute("data-normalization-bounds", JSON.stringify(normalizationBounds));
     this.renderer.setGraph(nextGraph);
   }
 
@@ -445,24 +443,78 @@ export class GraphViewportSession {
     if (!this.destroyed) this.events.onPinnedCount(this.positions.pinnedCount);
   }
 
-  private animateCamera(target: { x: number; y: number; ratio: number; angle?: number }): void {
+  private animateCamera(target: {
+    x: number;
+    y: number;
+    ratio: number;
+    angle?: number;
+  }): Promise<void> {
     const camera = this.renderer.getCamera();
     if (this.snapshot?.reducedMotion) {
       camera.setState(target);
-    } else {
-      void camera.animate(target, { duration: 280, easing: "quadraticInOut" });
+      return Promise.resolve();
     }
+    return camera.animate(target, { duration: 280, easing: "quadraticInOut" });
+  }
+
+  private scheduleCenterCorrection(id: string, operation: number, attempts = 3): void {
+    if (operation !== this.cameraOperation) return;
+    if (this.cameraFrame !== undefined) cancelAnimationFrame(this.cameraFrame);
+    this.cameraFrame = requestAnimationFrame(() => {
+      this.cameraFrame = undefined;
+      if (
+        this.destroyed ||
+        operation !== this.cameraOperation ||
+        this.selected !== id ||
+        !this.displayGraph.hasNode(id)
+      ) {
+        return;
+      }
+      const camera = this.renderer.getCamera();
+      const cameraState = camera.getState();
+      const dimensions = this.renderer.getDimensions();
+      const viewportCenter = { x: dimensions.width / 2, y: dimensions.height / 2 };
+      const nodeViewport = this.renderer.graphToViewport(this.positions.getCurrent(id));
+      if (Math.hypot(nodeViewport.x - viewportCenter.x, nodeViewport.y - viewportCenter.y) <= 1) {
+        return;
+      }
+      const nodePosition = this.renderer.viewportToFramedGraph(nodeViewport);
+      const centerPosition = this.renderer.viewportToFramedGraph(viewportCenter);
+      camera.setState({
+        x: cameraState.x + nodePosition.x - centerPosition.x,
+        y: cameraState.y + nodePosition.y - centerPosition.y,
+      });
+      if (attempts > 1) this.scheduleCenterCorrection(id, operation, attempts - 1);
+    });
   }
 
   private centerSelection(id: string): void {
     if (this.cameraFrame !== undefined) cancelAnimationFrame(this.cameraFrame);
+    const operation = ++this.cameraOperation;
     this.cameraFrame = requestAnimationFrame(() => {
       this.cameraFrame = undefined;
-      const data = this.renderer.getNodeDisplayData(id);
-      if (!data) return;
+      if (operation !== this.cameraOperation || !this.displayGraph.hasNode(id)) return;
       const camera = this.renderer.getCamera();
-      const target = { x: data.x, y: data.y, ratio: Math.min(camera.getState().ratio, 0.85) };
-      this.animateCamera(target);
+      const cameraState = camera.getState();
+      const ratio = Math.min(cameraState.ratio, 0.85);
+      const provisionalState = { ...cameraState, ratio };
+      const viewportPosition = this.renderer.graphToViewport(this.positions.getCurrent(id), {
+        cameraState: provisionalState,
+      });
+      const dimensions = this.renderer.getDimensions();
+      const nodePosition = this.renderer.viewportToFramedGraph(viewportPosition, {
+        cameraState: provisionalState,
+      });
+      const viewportCenter = this.renderer.viewportToFramedGraph(
+        { x: dimensions.width / 2, y: dimensions.height / 2 },
+        { cameraState: provisionalState },
+      );
+      const target = {
+        x: provisionalState.x + nodePosition.x - viewportCenter.x,
+        y: provisionalState.y + nodePosition.y - viewportCenter.y,
+        ratio,
+      };
+      void this.animateCamera(target).then(() => this.scheduleCenterCorrection(id, operation));
     });
   }
 
@@ -485,6 +537,7 @@ export class GraphViewportSession {
 
     this.snapshot = next;
     this.selected = next.selected;
+    if (selectionChanged) this.cancelStageClick();
     this.searchMatches = next.searchMatches;
     if (next.searchMatches) {
       this.container.setAttribute("data-search-match-count", String(next.searchMatches.size));
@@ -498,9 +551,7 @@ export class GraphViewportSession {
         next.selected && this.displayGraph.hasNode(next.selected)
           ? neighborsOf(this.displayGraph, next.selected)
           : new Set<string>();
-      this.recomputePriorityNeighborLabels();
     }
-    if (!projectionChanged && focusChanged) this.recomputePriorityNeighborLabels();
 
     if (this.renderer.getSetting("hideEdgesOnMove") === nextEligible) {
       this.renderer.setSetting("hideEdgesOnMove", !nextEligible);
@@ -529,7 +580,10 @@ export class GraphViewportSession {
     this.positions.reset();
     this.emitPinnedCount();
     this.installDisplayGraph(snapshot.projection);
-    this.animateCamera({ x: 0.5, y: 0.5, ratio: OVERVIEW_CAMERA_RATIO, angle: 0 });
+    this.cameraOperation += 1;
+    if (this.cameraFrame !== undefined) cancelAnimationFrame(this.cameraFrame);
+    this.cameraFrame = undefined;
+    void this.animateCamera({ x: 0.5, y: 0.5, ratio: OVERVIEW_CAMERA_RATIO, angle: 0 });
     this.startMotion();
   }
 
@@ -546,14 +600,19 @@ export class GraphViewportSession {
     this.cancelDrag();
     if (this.cameraFrame !== undefined) cancelAnimationFrame(this.cameraFrame);
     this.cameraFrame = undefined;
+    this.cameraOperation += 1;
+    this.cancelStageClick();
     this.hovered = undefined;
     this.hoverNeighbors.clear();
     this.searchMatches = undefined;
-    this.priorityNeighborLabels.clear();
     this.container.removeAttribute("data-hovered-node");
     this.container.removeAttribute("data-hovered-neighbor-count");
     this.container.removeAttribute("data-search-match-count");
+    this.container.removeAttribute("data-normalization-bounds");
     this.container.removeAttribute("data-camera-ratio");
+    this.container.removeAttribute("data-label-visibility");
+    this.container.removeAttribute("data-label-opacity");
+    this.container.removeAttribute("data-label-size");
     this.renderer.kill();
   }
 }

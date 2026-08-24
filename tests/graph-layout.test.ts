@@ -1,12 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createGraph, type GraphProjection, type RhizomeGraph } from "../src/app/graph";
-import {
-  labelLodForRatio,
-  selectPriorityLabels,
-  shouldForceNeighborLabels,
-} from "../src/app/graph-labels";
+import { labelZoomStyleForRatio } from "../src/app/graph-labels";
 import {
   buildPhysicalLinks,
+  clampPositionToRadius,
   createDisplayGraph,
   DEFAULT_GRAPH_FORCE_SETTINGS,
   FORCE_SETTINGS,
@@ -14,8 +11,10 @@ import {
   GraphPositionStore,
   graphForceParameters,
   isMotionEligible,
+  nodeRadius,
   ProjectionInvariantError,
   physicalLinkStrength,
+  projectionBaseBounds,
 } from "../src/app/graph-layout";
 import { blendGraphTone, nodeTone } from "../src/app/graph-theme";
 import type { GraphManifest } from "../src/shared/contracts";
@@ -173,6 +172,43 @@ describe("display graph", () => {
 });
 
 describe("motion policy and position state", () => {
+  it("gives connected hubs a pronounced but bounded size advantage", () => {
+    const radius = (degree: number) => nodeRadius({ ...manifest.nodes[0], degree });
+
+    expect(radius(0)).toBeCloseTo(3.25);
+    expect(radius(1)).toBeCloseTo(4.4);
+    expect(radius(4)).toBeLessThan(radius(16));
+    expect(radius(25) - radius(1)).toBeGreaterThan(4);
+    expect(radius(100)).toBe(10.5);
+    expect(radius(10_000)).toBe(10.5);
+  });
+
+  it("derives stable padded normalization bounds from compiler positions", () => {
+    const source = createGraph(manifest);
+    const positions = new GraphPositionStore(source);
+    positions.setCurrent("a", { x: -10_000, y: 10_000 });
+
+    expect(projectionBaseBounds(projection(["a", "b"], ["ab-link"]), positions)).toEqual({
+      x: [-10, 210],
+      y: [-1, 1],
+    });
+    expect(projectionBaseBounds(projection([], []), positions)).toEqual({
+      x: [0, 1],
+      y: [0, 1],
+    });
+  });
+
+  it("caps pointer excursions within the recoverable drag radius", () => {
+    expect(clampPositionToRadius({ x: 30, y: 40 }, { x: 0, y: 0 }, 100)).toEqual({
+      x: 30,
+      y: 40,
+    });
+    expect(clampPositionToRadius({ x: 300, y: 400 }, { x: 0, y: 0 }, 100)).toEqual({
+      x: 60,
+      y: 80,
+    });
+  });
+
   it("maps Obsidian-style force controls to bounded simulation parameters", () => {
     const defaults = graphForceParameters(DEFAULT_GRAPH_FORCE_SETTINGS);
     expect(defaults.centerStrength).toBeCloseTo(0.006);
@@ -302,7 +338,7 @@ describe("motion policy and position state", () => {
 
     const neighborOrigin = positions.getCurrent("b");
     controller.beginDrag("a", positions.getCurrent("a"), 0);
-    controller.moveDrag("a", { x: 100, y: 0 }, 16);
+    controller.moveDrag("a", { x: 80, y: 0 }, 16);
     controller.pause();
     controller.advance(12);
     expect(positions.getCurrent("b").x).toBeLessThan(neighborOrigin.x);
@@ -345,6 +381,36 @@ describe("motion policy and position state", () => {
     controller.kill();
   });
 
+  it("recovers after an extreme pointer excursion without stranding the node", async () => {
+    const source = createGraph(manifest);
+    const positions = new GraphPositionStore(source);
+    const display = createDisplayGraph(source, projection(["a", "b"], ["ab-link"]), positions);
+    const controller = new GraphMotionController({
+      graph: display,
+      positions,
+      forceSettings: DEFAULT_GRAPH_FORCE_SETTINGS,
+      onStatus: () => undefined,
+      onPinnedChange: () => undefined,
+    });
+    await controller.start(true);
+
+    const origin = positions.getCurrent("a");
+    controller.beginDrag("a", origin, 0);
+    controller.moveDrag("a", { x: -100_000, y: 0 }, 16);
+    const dragged = positions.getCurrent("a");
+    expect(Math.hypot(dragged.x - origin.x, dragged.y - origin.y)).toBeCloseTo(
+      FORCE_SETTINGS.interactiveMaxDisplacement,
+    );
+
+    controller.endDrag("a", false, 200);
+    controller.pause();
+    const releasedDistance = Math.hypot(dragged.x - origin.x, dragged.y - origin.y);
+    controller.advance(20);
+    const settled = positions.getCurrent("a");
+    expect(Math.hypot(settled.x - origin.x, settled.y - origin.y)).toBeLessThan(releasedDistance);
+    controller.kill();
+  });
+
   it("bounds automatic motion around the session origin", async () => {
     const source = createGraph(manifest);
     const positions = new GraphPositionStore(source);
@@ -368,23 +434,16 @@ describe("motion policy and position state", () => {
 });
 
 describe("label policy", () => {
-  it("reduces label density while zooming out", () => {
-    expect(labelLodForRatio(1)).toEqual({ density: 0.045, renderedSizeThreshold: 5.5 });
-    expect(labelLodForRatio(4)).toEqual({ density: 0.008, renderedSizeThreshold: 9.5 });
+  it("scales and fades every label uniformly with zoom", () => {
+    expect(labelZoomStyleForRatio(0.5)).toEqual({ visible: true, size: 13, opacity: 1 });
+    expect(labelZoomStyleForRatio(1)).toEqual({ visible: true, size: 12, opacity: 0.953 });
+    expect(labelZoomStyleForRatio(2)).toEqual({ visible: true, size: 8.485, opacity: 0.403 });
   });
 
-  it("forces a bounded neighbor set only in a close focused view", () => {
-    expect(shouldForceNeighborLabels(true, 48, 1.25)).toBe(true);
-    expect(shouldForceNeighborLabels(false, 20, 0.8)).toBe(false);
-    expect(shouldForceNeighborLabels(true, 49, 0.8)).toBe(false);
-    expect(shouldForceNeighborLabels(true, 20, 1.26)).toBe(false);
-
-    const priorities = selectPriorityLabels(
-      ["low", "tie-b", "high", "tie-a"],
-      (id) => ({ low: 1, high: 5, "tie-a": 3, "tie-b": 3 })[id] ?? 0,
-      3,
-    );
-    expect([...priorities]).toEqual(["high", "tie-a", "tie-b"]);
+  it("removes every label at the distant threshold", () => {
+    expect(labelZoomStyleForRatio(2.99).visible).toBe(true);
+    expect(labelZoomStyleForRatio(3)).toEqual({ visible: false, size: 6.928, opacity: 0 });
+    expect(labelZoomStyleForRatio(4)).toEqual({ visible: false, size: 6.5, opacity: 0 });
   });
 });
 

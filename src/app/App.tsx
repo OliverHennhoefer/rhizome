@@ -98,6 +98,10 @@ export function App() {
     setSearch("");
     setReaderOpen(true);
   };
+  const clearSelection = () => {
+    update({ note: undefined, focus: false, direction: "both" });
+    setReaderOpen(false);
+  };
   const toggleFilter = (key: FilterKey, value: string) => {
     setState((current) => {
       const next = new Set(current[key]);
@@ -177,6 +181,7 @@ export function App() {
               manifest={manifest}
               onClearFilters={clearFilters}
               onClearFocus={() => update({ focus: false, direction: "both" })}
+              onClearSelection={clearSelection}
               onOverview={showOverview}
               onSelect={select}
               onToggleFilter={toggleFilter}

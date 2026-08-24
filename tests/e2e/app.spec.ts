@@ -1,9 +1,31 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 
 async function searchNotes(page: Page, query: string): Promise<void> {
   const filters = page.getByRole("button", { name: "Filters" });
   if ((await filters.getAttribute("aria-expanded")) !== "true") await filters.click();
   await page.getByLabel("Search notes").fill(query);
+}
+
+async function findEmptyGraphPoint(page: Page, graph: Locator): Promise<{ x: number; y: number }> {
+  const bounds = await graph.boundingBox();
+  if (!bounds) throw new Error("Graph viewport is not visible.");
+  const candidates = [
+    [0.08, 0.12],
+    [0.08, 0.5],
+    [0.5, 0.08],
+    [0.92, 0.5],
+    [0.5, 0.92],
+  ];
+  for (const [relativeX, relativeY] of candidates) {
+    const point = {
+      x: bounds.x + bounds.width * relativeX,
+      y: bounds.y + bounds.height * relativeY,
+    };
+    await page.mouse.move(point.x, point.y);
+    await page.waitForTimeout(80);
+    if ((await graph.getAttribute("data-hovered-node")) === null) return point;
+  }
+  throw new Error("Could not find an empty point in the graph viewport.");
 }
 
 test("selects notes, restores query state, and loads details lazily", async ({ page }) => {
@@ -63,6 +85,97 @@ test("renders the analytical graph without a renderer switch", async ({ page }) 
   await expect(page.getByText(/Graph (settled|relaxing)/)).toHaveCount(0);
   await expect(page.getByText(/Drag nodes/)).toHaveCount(0);
   await expect(page.getByRole("group", { name: "Graph view" })).toHaveCount(0);
+});
+
+test("shows every label uniformly, fades them with distance, then hides them", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "root", "root desktop project only");
+  await page.goto("");
+  const graph = page.getByTestId("graph-2d");
+  await expect(graph).toHaveAttribute("data-label-visibility", "all");
+  await expect(graph).toHaveAttribute("data-label-opacity", "0.927");
+  await expect(graph).toHaveAttribute("data-label-size", "11.547");
+
+  const bounds = await graph.boundingBox();
+  expect(bounds).not.toBeNull();
+  if (!bounds) return;
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  for (let step = 0; step < 3; step += 1) {
+    await page.mouse.wheel(0, 1_000);
+    await page.waitForTimeout(120);
+  }
+  await expect(graph).toHaveAttribute("data-camera-ratio", "4.0000");
+  await expect(graph).toHaveAttribute("data-label-visibility", "none");
+  await expect(graph).toHaveAttribute("data-label-opacity", "0.000");
+
+  for (let step = 0; step < 4; step += 1) {
+    await page.mouse.wheel(0, -1_000);
+    await page.waitForTimeout(120);
+  }
+  await expect(graph).toHaveAttribute("data-label-visibility", "all");
+  await expect(graph).toHaveAttribute("data-label-opacity", "1.000");
+  await expect(graph).toHaveAttribute("data-label-size", "13.000");
+});
+
+test("clears selection on a stage click while preserving double-click zoom", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "root", "root desktop project only");
+  await page.goto("");
+  const graph = page.getByTestId("graph-2d");
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
+  await searchNotes(page, "subword tokenization");
+  await page.getByRole("button", { name: /Subword tokenization/ }).click();
+  await expect(page.getByTestId("reader")).toBeVisible();
+  await page.waitForTimeout(350);
+
+  const singleClickPoint = await findEmptyGraphPoint(page, graph);
+  await page.mouse.click(singleClickPoint.x, singleClickPoint.y);
+  await expect(page.getByTestId("reader")).toHaveCount(0);
+  await expect(page).not.toHaveURL(/note=/);
+
+  await searchNotes(page, "subword tokenization");
+  await page.getByRole("button", { name: /Subword tokenization/ }).click();
+  await page.waitForTimeout(350);
+  const ratioBefore = Number(await graph.getAttribute("data-camera-ratio"));
+  const doubleClickPoint = await findEmptyGraphPoint(page, graph);
+  await page.mouse.dblclick(doubleClickPoint.x, doubleClickPoint.y, { delay: 80 });
+  await expect
+    .poll(async () => Number(await graph.getAttribute("data-camera-ratio")))
+    .toBeLessThan(ratioBefore);
+  await page.waitForTimeout(300);
+  expect(new URL(page.url()).searchParams.get("note")).toBe("Language/Subword tokenization");
+  await expect(page.getByTestId("reader")).toBeVisible();
+});
+
+test("keeps graph normalization stable during an extreme node drag", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "root", "root desktop project only");
+  test.setTimeout(60_000);
+  await page.goto("");
+  const graph = page.getByTestId("graph-2d");
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
+  await searchNotes(page, "subword tokenization");
+  await page.getByRole("button", { name: /Subword tokenization/ }).click();
+  await page.waitForTimeout(350);
+
+  const bounds = await graph.boundingBox();
+  expect(bounds).not.toBeNull();
+  if (!bounds) return;
+  const x = bounds.x + bounds.width / 2;
+  const y = bounds.y + bounds.height / 2;
+  const normalizationBounds = await graph.getAttribute("data-normalization-bounds");
+  expect(normalizationBounds).not.toBeNull();
+
+  await page.mouse.move(x, y);
+  await expect(graph).toHaveAttribute("data-hovered-node", "Language/Subword tokenization");
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width + 240, y, { steps: 8 });
+  await page.mouse.up();
+
+  await expect(graph).toHaveAttribute("data-normalization-bounds", normalizationBounds ?? "");
+  await expect(graph).toHaveAttribute("data-pinned-count", "0");
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
 });
 
 test("clears hover state when a focused projection removes the hovered node", async ({
@@ -243,6 +356,7 @@ test("shift-drag pins, overview resets, and normal drag releases a node", async 
   const y = bounds.y + bounds.height / 2;
 
   await page.keyboard.down("Shift");
+  await findEmptyGraphPoint(page, graph);
   await page.mouse.move(x, y);
   await expect(graph).toHaveAttribute("data-hovered-node", "Language/Subword tokenization");
   await expect(graph).toHaveAttribute("data-hovered-neighbor-count", "3");
@@ -255,9 +369,14 @@ test("shift-drag pins, overview resets, and normal drag releases a node", async 
 
   await searchNotes(page, "adamw");
   await page.getByRole("button", { name: /AdamW/ }).click();
+  await expect(page.getByTestId("reader").getByRole("heading", { name: "AdamW" })).toBeVisible();
   await searchNotes(page, "subword tokenization");
   await page.getByRole("button", { name: /Subword tokenization/ }).click();
+  await expect(
+    page.getByTestId("reader").getByRole("heading", { name: "Subword tokenization" }),
+  ).toBeVisible();
   await page.waitForTimeout(350);
+  await findEmptyGraphPoint(page, graph);
   await page.mouse.move(x, y);
   await expect(graph).toHaveAttribute("data-hovered-node", "Language/Subword tokenization");
   await page.mouse.down();

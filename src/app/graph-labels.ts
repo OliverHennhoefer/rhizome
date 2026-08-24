@@ -1,45 +1,43 @@
-export interface LabelLod {
-  density: number;
-  renderedSizeThreshold: number;
+export interface LabelZoomStyle {
+  visible: boolean;
+  size: number;
+  opacity: number;
 }
 
-export const LABEL_SETTINGS = {
-  focusedNeighborLimit: 6,
-  focusedProjectionLimit: 48,
-  focusedZoomRatio: 1.25,
+export const LABEL_ZOOM_SETTINGS = {
+  baseSize: 12,
+  maximumSize: 13,
+  minimumSize: 6.5,
+  fullOpacityRatio: 0.7,
+  hiddenRatio: 3,
 } as const;
 
-export function labelLodForRatio(ratio: number): LabelLod {
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.max(minimum, Math.min(maximum, value));
+}
+
+function round(value: number): number {
+  return Math.round(value * 1_000) / 1_000;
+}
+
+export function labelZoomStyleForRatio(ratio: number): LabelZoomStyle {
   const safeRatio = Number.isFinite(ratio) && ratio > 0 ? ratio : 1;
+  const size = clamp(
+    LABEL_ZOOM_SETTINGS.baseSize / Math.sqrt(safeRatio),
+    LABEL_ZOOM_SETTINGS.minimumSize,
+    LABEL_ZOOM_SETTINGS.maximumSize,
+  );
+  const fadeProgress = clamp(
+    (LABEL_ZOOM_SETTINGS.hiddenRatio - safeRatio) /
+      (LABEL_ZOOM_SETTINGS.hiddenRatio - LABEL_ZOOM_SETTINGS.fullOpacityRatio),
+    0,
+    1,
+  );
+  const opacity = fadeProgress * fadeProgress * (3 - 2 * fadeProgress);
+
   return {
-    density: Math.max(0.008, Math.min(0.08, 0.045 / safeRatio ** 1.7)),
-    renderedSizeThreshold: Math.max(5, Math.min(10, 5.5 + 2 * Math.log2(safeRatio))),
+    visible: opacity > 0,
+    size: round(size),
+    opacity: round(opacity),
   };
-}
-
-export function shouldForceNeighborLabels(
-  focused: boolean,
-  projectionOrder: number,
-  cameraRatio: number,
-): boolean {
-  return (
-    focused &&
-    projectionOrder <= LABEL_SETTINGS.focusedProjectionLimit &&
-    cameraRatio <= LABEL_SETTINGS.focusedZoomRatio
-  );
-}
-
-export function selectPriorityLabels(
-  candidates: Iterable<string>,
-  degreeOf: (id: string) => number,
-  limit: number = LABEL_SETTINGS.focusedNeighborLimit,
-): Set<string> {
-  return new Set(
-    [...candidates]
-      .sort((left, right) => {
-        const degreeDifference = degreeOf(right) - degreeOf(left);
-        return degreeDifference || left.localeCompare(right);
-      })
-      .slice(0, Math.max(0, limit)),
-  );
 }
