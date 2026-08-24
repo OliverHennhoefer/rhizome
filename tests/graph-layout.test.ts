@@ -8,9 +8,11 @@ import {
 import {
   buildPhysicalLinks,
   createDisplayGraph,
+  DEFAULT_GRAPH_FORCE_SETTINGS,
   FORCE_SETTINGS,
   GraphMotionController,
   GraphPositionStore,
+  graphForceParameters,
   isMotionEligible,
   ProjectionInvariantError,
   physicalLinkStrength,
@@ -171,6 +173,24 @@ describe("display graph", () => {
 });
 
 describe("motion policy and position state", () => {
+  it("maps Obsidian-style force controls to bounded simulation parameters", () => {
+    const defaults = graphForceParameters(DEFAULT_GRAPH_FORCE_SETTINGS);
+    expect(defaults.centerStrength).toBeCloseTo(0.006);
+    expect(defaults.chargeStrength).toBe(-32);
+    expect(defaults.linkStrengthScale).toBe(1);
+    expect(defaults.linkDistance).toBe(42);
+
+    const bounded = graphForceParameters({
+      centerForce: 500,
+      repelForce: -10,
+      linkForce: Number.NaN,
+      linkDistance: 200,
+    });
+    expect(Math.abs(bounded.chargeStrength)).toBe(0);
+    expect(bounded.linkStrengthScale).toBe(1);
+    expect(bounded.linkDistance).toBe(100);
+  });
+
   it("applies desktop and compact thresholds", () => {
     expect(isMotionEligible(projection(["a", "b"], []), false)).toBe(true);
     expect(
@@ -218,6 +238,7 @@ describe("motion policy and position state", () => {
       const controller = new GraphMotionController({
         graph: display,
         positions,
+        forceSettings: DEFAULT_GRAPH_FORCE_SETTINGS,
         onStatus: () => undefined,
         onPinnedChange: () => undefined,
       });
@@ -243,6 +264,7 @@ describe("motion policy and position state", () => {
     const controller = new GraphMotionController({
       graph: display,
       positions,
+      forceSettings: DEFAULT_GRAPH_FORCE_SETTINGS,
       onStatus: () => undefined,
       onPinnedChange: () => undefined,
     });
@@ -265,6 +287,35 @@ describe("motion policy and position state", () => {
     controller.kill();
   });
 
+  it("pulls linked nodes during a drag and preserves release inertia", async () => {
+    const source = createGraph(manifest);
+    const positions = new GraphPositionStore(source);
+    const display = createDisplayGraph(source, projection(["a", "b"], ["ab-link"]), positions);
+    const controller = new GraphMotionController({
+      graph: display,
+      positions,
+      forceSettings: DEFAULT_GRAPH_FORCE_SETTINGS,
+      onStatus: () => undefined,
+      onPinnedChange: () => undefined,
+    });
+    await controller.start(true);
+
+    const neighborOrigin = positions.getCurrent("b");
+    controller.beginDrag("a", positions.getCurrent("a"), 0);
+    controller.moveDrag("a", { x: 100, y: 0 }, 16);
+    controller.pause();
+    controller.advance(12);
+    expect(positions.getCurrent("b").x).toBeLessThan(neighborOrigin.x);
+
+    controller.endDrag("a", false, 16);
+    controller.pause();
+    const release = positions.getCurrent("a");
+    controller.advance(1);
+    expect(positions.getCurrent("a").x).toBeGreaterThan(release.x);
+    expect(positions.isPinned("a")).toBe(false);
+    controller.kill();
+  });
+
   it("bounds automatic motion around the session origin", async () => {
     const source = createGraph(manifest);
     const positions = new GraphPositionStore(source);
@@ -272,6 +323,7 @@ describe("motion policy and position state", () => {
     const controller = new GraphMotionController({
       graph: display,
       positions,
+      forceSettings: DEFAULT_GRAPH_FORCE_SETTINGS,
       onStatus: () => undefined,
       onPinnedChange: () => undefined,
     });

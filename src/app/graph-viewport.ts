@@ -270,7 +270,6 @@ export class GraphViewportSession {
 
   private beginDrag(id: string, event: { x: number; y: number; original: Event }): void {
     if (!this.displayGraph.hasNode(id)) return;
-    const position = this.positions.getCurrent(id);
     this.drag = {
       id,
       moved: false,
@@ -280,14 +279,17 @@ export class GraphViewportSession {
       startY: event.y,
     };
     this.renderer.getCamera().disable();
-    this.motion?.beginDrag(id, position);
   }
 
   private moveDrag(point: { x: number; y: number; preventSigmaDefault(): void }): void {
     const drag = this.drag;
     if (!drag || !this.displayGraph.hasNode(drag.id)) return;
     point.preventSigmaDefault();
-    if (Math.hypot(point.x - drag.startX, point.y - drag.startY) > 4) drag.moved = true;
+    if (!drag.moved) {
+      if (Math.hypot(point.x - drag.startX, point.y - drag.startY) <= 4) return;
+      drag.moved = true;
+      this.motion?.beginDrag(drag.id, this.positions.getCurrent(drag.id));
+    }
     const position = this.renderer.viewportToGraph(point);
     if (this.motion) this.motion.moveDrag(drag.id, position);
     else {
@@ -299,12 +301,14 @@ export class GraphViewportSession {
   private finishDrag(original?: Event): void {
     const drag = this.drag;
     if (!drag) return;
-    const keepPinned = !drag.touch && original instanceof MouseEvent && original.shiftKey;
-    if (this.motion) this.motion.endDrag(drag.id, keepPinned);
-    else {
-      if (keepPinned) this.positions.pin(drag.id);
-      else this.positions.release(drag.id);
-      this.emitPinnedCount();
+    if (drag.moved) {
+      const keepPinned = !drag.touch && original instanceof MouseEvent && original.shiftKey;
+      if (this.motion) this.motion.endDrag(drag.id, keepPinned);
+      else {
+        if (keepPinned) this.positions.pin(drag.id);
+        else this.positions.release(drag.id);
+        this.emitPinnedCount();
+      }
     }
     if (drag.moved) this.suppressClickUntil = performance.now() + 300;
     this.drag = undefined;
