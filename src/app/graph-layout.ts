@@ -36,10 +36,14 @@ export const FORCE_SETTINGS = {
   dragAlpha: 0.42,
   dragAlphaTarget: 0.18,
   dragLinkBoost: 2.2,
+  interactiveVelocityDecay: 0.24,
   interactiveAnchorStrength: 0.006,
   interactiveMaxDisplacement: 96,
   maxAutomaticDisplacement: 30,
   maxReleaseVelocity: 6,
+  releaseAlpha: 0.54,
+  releaseLinkBoost: 3.2,
+  releaseLinkBoostUntilAlpha: 0.14,
   releaseVelocityScale: 0.5,
   velocityDecay: 0.34,
 } as const;
@@ -311,6 +315,7 @@ export class GraphMotionController {
   private forceSettings: GraphForceSettings;
   private nodes = new Map<string, LayoutNode>();
   private activeDrag?: string;
+  private releaseNode?: string;
   private dragKinematics?: DragKinematics;
   private interactive = false;
   private killed = false;
@@ -438,20 +443,39 @@ export class GraphMotionController {
       },
       { attributes: ["x", "y"] },
     );
+    this.relaxReleaseSpring();
   }
 
   private applyLinkStrength(): void {
     const parameters = graphForceParameters(this.forceSettings);
     const activeDrag = this.activeDrag;
+    const releaseNode = this.releaseNode;
     this.linkForce?.strength((link) => {
       const source = typeof link.source === "string" ? link.source : link.source.id;
       const target = typeof link.target === "string" ? link.target : link.target.id;
-      const boost =
-        activeDrag && (source === activeDrag || target === activeDrag)
-          ? FORCE_SETTINGS.dragLinkBoost
+      const incidentToDrag = activeDrag && (source === activeDrag || target === activeDrag);
+      const incidentToRelease = releaseNode && (source === releaseNode || target === releaseNode);
+      const boost = incidentToDrag
+        ? FORCE_SETTINGS.dragLinkBoost
+        : incidentToRelease
+          ? FORCE_SETTINGS.releaseLinkBoost
           : 1;
       return physicalLinkStrength(link.occurrences) * parameters.linkStrengthScale * boost;
     });
+  }
+
+  private relaxReleaseSpring(): void {
+    if (
+      !this.releaseNode ||
+      this.activeDrag ||
+      !this.simulation ||
+      this.simulation.alpha() > FORCE_SETTINGS.releaseLinkBoostUntilAlpha
+    ) {
+      return;
+    }
+    this.releaseNode = undefined;
+    this.applyLinkStrength();
+    this.simulation.velocityDecay(FORCE_SETTINGS.velocityDecay);
   }
 
   private setInteractiveAnchors(): void {
@@ -460,6 +484,7 @@ export class GraphMotionController {
   }
 
   beginDrag(id: string, position: Position, timestamp = performance.now()): void {
+    this.releaseNode = undefined;
     this.activeDrag = id;
     this.interactive = true;
     this.dragKinematics = {
@@ -482,6 +507,7 @@ export class GraphMotionController {
     }
     this.moveDrag(id, position, timestamp);
     this.simulation
+      ?.velocityDecay(FORCE_SETTINGS.interactiveVelocityDecay)
       ?.alpha(Math.max(this.simulation.alpha(), FORCE_SETTINGS.dragAlpha))
       .alphaTarget(FORCE_SETTINGS.dragAlphaTarget)
       .restart();
@@ -525,12 +551,14 @@ export class GraphMotionController {
     const node = this.nodes.get(id);
     const position = this.positions.getCurrent(id);
     if (keepPinned) {
+      this.releaseNode = undefined;
       this.positions.pin(id, position);
       if (node) {
         node.fx = position.x;
         node.fy = position.y;
       }
     } else {
+      this.releaseNode = id;
       this.positions.release(id);
       if (node) {
         node.fx = null;
@@ -554,9 +582,10 @@ export class GraphMotionController {
     this.applyLinkStrength();
     this.onPinnedChange();
     if (this.simulation) {
+      if (keepPinned) this.simulation.velocityDecay(FORCE_SETTINGS.velocityDecay);
       this.simulation
         .alphaTarget(0)
-        .alpha(Math.max(this.simulation.alpha(), FORCE_SETTINGS.dragAlpha))
+        .alpha(Math.max(this.simulation.alpha(), FORCE_SETTINGS.releaseAlpha))
         .restart();
       this.onStatus("running");
     }
@@ -598,6 +627,7 @@ export class GraphMotionController {
     this.anchorXForce = undefined;
     this.anchorYForce = undefined;
     this.dragKinematics = undefined;
+    this.releaseNode = undefined;
     this.nodes.clear();
   }
 }

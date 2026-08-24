@@ -316,6 +316,35 @@ describe("motion policy and position state", () => {
     controller.kill();
   });
 
+  it("springs a released node firmly back toward its linked neighborhood", async () => {
+    const source = createGraph(manifest);
+    const positions = new GraphPositionStore(source);
+    const display = createDisplayGraph(source, projection(["a", "b"], ["ab-link"]), positions);
+    const controller = new GraphMotionController({
+      graph: display,
+      positions,
+      forceSettings: DEFAULT_GRAPH_FORCE_SETTINGS,
+      onStatus: () => undefined,
+      onPinnedChange: () => undefined,
+    });
+    await controller.start(true);
+
+    controller.beginDrag("a", positions.getCurrent("a"), 0);
+    controller.moveDrag("a", { x: -100, y: 0 }, 16);
+    controller.endDrag("a", false, 200);
+    controller.pause();
+    const released = positions.getCurrent("a");
+    const neighbor = positions.getCurrent("b");
+    const releasedDistance = Math.abs(neighbor.x - released.x);
+    controller.advance(8);
+
+    expect(positions.getCurrent("a").x).toBeGreaterThan(released.x);
+    expect(Math.abs(positions.getCurrent("b").x - positions.getCurrent("a").x)).toBeLessThan(
+      releasedDistance,
+    );
+    controller.kill();
+  });
+
   it("bounds automatic motion around the session origin", async () => {
     const source = createGraph(manifest);
     const positions = new GraphPositionStore(source);
