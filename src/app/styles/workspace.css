@@ -1,0 +1,707 @@
+.app-shell {
+  display: grid;
+  grid-template-rows: 56px minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  background: var(--background);
+}
+
+.app-header {
+  z-index: 20;
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(280px, 520px);
+  gap: 24px;
+  align-items: center;
+  padding: 8px 14px 8px 16px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(29, 31, 34, 0.88);
+  backdrop-filter: saturate(110%) blur(20px);
+}
+
+.brand {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.brand-mark {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  color: var(--secondary);
+  background: var(--surface);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.brand strong {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 620;
+  letter-spacing: -0.018em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-wrap {
+  position: relative;
+  width: 100%;
+}
+
+.search-wrap::before {
+  position: absolute;
+  top: 50%;
+  left: 13px;
+  z-index: 1;
+  width: 10px;
+  height: 10px;
+  border: 1.25px solid var(--muted);
+  border-radius: 50%;
+  content: "";
+  pointer-events: none;
+  transform: translateY(-60%);
+}
+
+.search-wrap::after {
+  position: absolute;
+  top: 23px;
+  left: 22px;
+  z-index: 1;
+  width: 5px;
+  height: 1px;
+  background: var(--muted);
+  content: "";
+  pointer-events: none;
+  transform: rotate(45deg);
+}
+
+.search-wrap input {
+  width: 100%;
+  height: 38px;
+  padding: 0 13px 0 34px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  outline: none;
+  color: var(--text);
+  background: var(--surface);
+  font-size: 12px;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.search-wrap input::placeholder {
+  color: var(--subtle);
+}
+
+.search-wrap input:hover {
+  background: #292b2f;
+}
+
+.search-wrap input:focus {
+  border-color: var(--line-strong);
+  background: #202225;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.04);
+}
+
+.search-results {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  left: 0;
+  z-index: 30;
+  overflow: hidden;
+  padding: 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 13px;
+  background: rgba(36, 38, 42, 0.96);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(20px);
+}
+
+.search-results button {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 11px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.search-results button:hover {
+  background: var(--surface-hover);
+}
+
+.search-results button span,
+.search-results small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-results small {
+  max-width: 48%;
+  color: var(--muted);
+}
+
+.workspace {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: radial-gradient(circle at 50% 44%, #1b1d20 0, var(--stage) 72%);
+}
+
+.graph-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.graph-canvas canvas {
+  cursor: grab;
+}
+
+.graph-canvas:active canvas {
+  cursor: grabbing;
+}
+
+.graph-summary,
+.graph-toolbar,
+.control-popover,
+.graph-status,
+.focus-status {
+  border: 1px solid var(--line);
+  background: rgba(29, 31, 34, 0.78);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(18px);
+}
+
+.graph-summary {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 4;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-height: 34px;
+  padding: 5px 8px 5px 11px;
+  border-radius: 11px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.graph-summary > span {
+  white-space: nowrap;
+}
+
+.graph-summary i {
+  padding-inline: 2px;
+  font-style: normal;
+}
+
+.active-filter-chips {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.active-filter-chips button,
+.active-filter-chips > span {
+  max-width: 120px;
+  overflow: hidden;
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--secondary);
+  background: var(--surface);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.active-filter-chips button {
+  cursor: pointer;
+}
+
+.active-filter-chips button:hover {
+  background: var(--surface-hover);
+}
+
+.active-filter-chips button span {
+  margin-left: 5px;
+  color: var(--muted);
+}
+
+.graph-controls {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 10;
+}
+
+.graph-toolbar {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  padding: 4px;
+  border-radius: 12px;
+}
+
+.graph-toolbar button {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--secondary);
+  background: transparent;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.graph-toolbar button:hover:not(:disabled),
+.graph-toolbar button[aria-expanded="true"] {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.graph-toolbar button.is-active,
+.graph-toolbar button[aria-pressed="true"] {
+  color: var(--background);
+  background: var(--text);
+}
+
+.graph-toolbar button:disabled {
+  opacity: 0.34;
+  cursor: not-allowed;
+}
+
+.graph-toolbar button small {
+  display: grid;
+  place-items: center;
+  min-width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  color: var(--background);
+  background: var(--text);
+  font-size: 8px;
+}
+
+.graph-toolbar button.is-active small {
+  color: var(--text);
+  background: var(--background);
+}
+
+.control-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.control-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(320px, calc(100vw - 28px));
+  max-height: min(620px, calc(100vh - 96px));
+  overflow: auto;
+  padding: 8px;
+  border-color: var(--line-strong);
+  border-radius: 14px;
+  background: rgba(36, 38, 42, 0.97);
+  box-shadow: var(--shadow);
+}
+
+.control-popover > header {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 10px 10px 12px;
+}
+
+.control-popover header h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.control-popover header button {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  padding: 0 0 2px;
+  border: 0;
+  border-radius: 50%;
+  color: var(--muted);
+  background: transparent;
+  font-size: 19px;
+  cursor: pointer;
+}
+
+.control-popover header button:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.focus-options {
+  display: grid;
+  gap: 6px;
+}
+
+.focus-options button,
+.popover-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--secondary);
+  background: var(--panel);
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.focus-options button:hover,
+.popover-action:hover:not(:disabled) {
+  border-color: var(--line-strong);
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.focus-options button[aria-pressed="true"] {
+  color: var(--background);
+  background: var(--text);
+}
+
+.focus-options small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.focus-options button[aria-pressed="true"] small {
+  color: #55575c;
+}
+
+.depth-control {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+  padding: 10px 2px 2px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.depth-control > span {
+  display: flex;
+  justify-content: space-between;
+}
+
+.depth-control strong {
+  color: var(--text);
+  font-weight: 550;
+}
+
+.depth-control input {
+  width: 100%;
+  accent-color: var(--text);
+}
+
+.filter-group {
+  border-top: 1px solid var(--line);
+}
+
+.filter-group summary {
+  display: flex;
+  align-items: center;
+  padding: 12px 8px;
+  color: var(--secondary);
+  font-size: 11px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.filter-group summary::-webkit-details-marker {
+  display: none;
+}
+
+.filter-group summary::before {
+  width: 17px;
+  color: var(--muted);
+  content: "+";
+}
+
+.filter-group[open] summary::before {
+  content: "−";
+}
+
+.filter-group summary small {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.filter-options {
+  max-height: 180px;
+  overflow: auto;
+  padding: 0 8px 10px 25px;
+}
+
+.filter-options label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 5px 0;
+  color: var(--muted);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.filter-options label:hover {
+  color: var(--text);
+}
+
+.filter-options input {
+  accent-color: var(--text);
+}
+
+.relation-legend {
+  display: grid;
+  gap: 8px;
+  padding: 12px 8px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.relation-legend span {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.relation-legend i {
+  width: 18px;
+  height: 1px;
+}
+
+.popover-action {
+  margin-top: 6px;
+}
+
+.popover-action:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.layout-facts {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.layout-facts strong {
+  color: var(--secondary);
+  font-weight: 550;
+}
+
+.graph-status,
+.focus-status {
+  position: absolute;
+  bottom: 14px;
+  z-index: 4;
+  min-height: 30px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  color: var(--muted);
+  font-size: 9px;
+  pointer-events: none;
+}
+
+.graph-status {
+  left: 14px;
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+
+.graph-status i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--subtle);
+}
+
+.graph-status.status-running i,
+.graph-status.status-loading i {
+  background: var(--text);
+  animation: motion-pulse 1.25s ease-out infinite;
+}
+
+.focus-status {
+  right: 14px;
+}
+
+@keyframes motion-pulse {
+  70% {
+    box-shadow: 0 0 0 5px rgba(255, 255, 255, 0);
+  }
+}
+
+.webgl-fallback {
+  display: grid;
+  place-content: center;
+  height: 100%;
+  padding: 30px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.webgl-fallback h2 {
+  margin-bottom: 4px;
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.webgl-fallback button {
+  justify-self: center;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--secondary);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+@media (max-width: 980px) {
+  .control-label {
+    display: none;
+  }
+
+  .graph-toolbar button {
+    padding-inline: 7px;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    grid-template-rows: 96px minmax(0, 1fr);
+  }
+
+  .app-header {
+    grid-template: 32px 40px / 1fr;
+    gap: 6px;
+    padding: 7px 10px 10px;
+  }
+
+  .brand-mark {
+    width: 26px;
+    height: 26px;
+  }
+
+  .search-wrap input {
+    height: 38px;
+  }
+
+  .graph-summary {
+    top: 10px;
+    left: 10px;
+    max-width: calc(100% - 224px);
+    overflow: hidden;
+  }
+
+  .active-filter-chips {
+    display: none;
+  }
+
+  .graph-controls {
+    top: 10px;
+    right: 10px;
+  }
+
+  .graph-toolbar {
+    gap: 1px;
+  }
+
+  .graph-toolbar button {
+    min-width: 32px;
+    justify-content: center;
+  }
+
+  .control-popover {
+    position: fixed;
+    top: auto;
+    right: 8px;
+    bottom: 8px;
+    left: 8px;
+    width: auto;
+    max-height: min(72dvh, 620px);
+    border-radius: 16px;
+  }
+
+  .graph-status {
+    bottom: 10px;
+    left: 10px;
+  }
+
+  .graph-status span:nth-of-type(n + 2) {
+    display: none;
+  }
+
+  .focus-status {
+    right: 10px;
+    bottom: 10px;
+  }
+}
+
+@media (max-width: 420px) {
+  .graph-summary {
+    display: none;
+  }
+
+  .graph-toolbar button {
+    min-width: 30px;
+    padding-inline: 6px;
+  }
+}

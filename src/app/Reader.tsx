@@ -1,13 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import type { EdgeEvidence, GraphManifest, NodeDetails } from "../shared/contracts";
+import { buildRelationshipViews, type RelationshipDirection } from "./relationship-model";
 
 interface Props {
   manifest: GraphManifest;
-  selected?: string;
+  selected: string;
+  onClose: () => void;
   onSelect: (id: string) => void;
 }
 
 const detailsCache = new Map<string, Promise<NodeDetails>>();
+
+function assetUrl(reference: string): string {
+  return `${import.meta.env.BASE_URL}${reference}`;
+}
 
 function loadDetails(reference: string): Promise<NodeDetails> {
   const cached = detailsCache.get(reference);
@@ -25,62 +31,126 @@ function loadDetails(reference: string): Promise<NodeDetails> {
   return request;
 }
 
-function assetUrl(reference: string): string {
-  return `${import.meta.env.BASE_URL}${reference}`;
+function directionGlyph(direction: RelationshipDirection): string {
+  if (direction === "outgoing") return "→";
+  if (direction === "incoming") return "←";
+  return "—";
 }
 
-function EvidenceList({
-  title,
-  evidence,
+function evidenceLocation(item: EdgeEvidence, manifest: GraphManifest): string {
+  const source = manifest.nodes.find((node) => node.id === item.source);
+  return `${source?.path ?? item.source}:${item.range.startLine}`;
+}
+
+function Relationships({
+  details,
   manifest,
   onSelect,
 }: {
-  title: string;
-  evidence: EdgeEvidence[];
+  details: NodeDetails;
   manifest: GraphManifest;
   onSelect: (id: string) => void;
 }) {
-  const nodes = useMemo(() => new Map(manifest.nodes.map((node) => [node.id, node])), [manifest]);
-  const groups = new Map<string, EdgeEvidence[]>();
-  for (const item of evidence) {
-    const group = groups.get(item.edgeId) ?? [];
-    group.push(item);
-    groups.set(item.edgeId, group);
-  }
-  if (evidence.length === 0) return null;
+  const relationships = useMemo(
+    () => buildRelationshipViews(details, manifest),
+    [details, manifest],
+  );
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  if (relationships.length === 0) return null;
+
+  const toggleEvidence = (edgeId: string) => {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(edgeId)) next.delete(edgeId);
+      else next.add(edgeId);
+      return next;
+    });
+  };
+
   return (
     <section className="relationships">
-      <h3>{title}</h3>
-      {[...groups.values()].map((items) => {
-        const first = items[0];
-        const counterpart = title === "Incoming" ? first.source : first.target;
-        return (
-          <article className="evidence" key={first.edgeId}>
-            <button type="button" onClick={() => onSelect(counterpart)}>
-              <span>{nodes.get(counterpart)?.title ?? counterpart}</span>
-              <small>
-                {first.type} · {items.length} occurrence{items.length === 1 ? "" : "s"}
-              </small>
-            </button>
-            {items.map((item) => (
-              <div
-                className="source-context"
-                key={`${item.edgeId}-${item.range.startLine}-${item.range.startColumn}-${item.range.endLine}-${item.range.endColumn}`}
-              >
-                <q>{item.excerpt}</q>
-                <span>
-                  {nodes.get(item.source)?.path ?? item.source}:{item.range.startLine}
-                </span>
+      <h3>Relationships</h3>
+      <div className="relationship-list">
+        {relationships.map((relationship) => {
+          const isExpanded = expanded.has(relationship.edgeId);
+          const evidenceId = `evidence-${relationship.edgeId}`;
+          return (
+            <article className="relationship" key={relationship.edgeId}>
+              <div className="relationship-main">
+                <button
+                  className="relationship-target"
+                  onClick={() => onSelect(relationship.counterpart.id)}
+                  type="button"
+                >
+                  <span className="relationship-type">
+                    <i aria-hidden="true">{directionGlyph(relationship.direction)}</i>
+                    {relationship.label}
+                  </span>
+                  <strong>
+                    {relationship.external?.hostname ?? relationship.counterpart.title}
+                  </strong>
+                  <small>
+                    {relationship.external?.path ??
+                      relationship.counterpart.path ??
+                      relationship.counterpart.kind}
+                  </small>
+                </button>
+                <div className="relationship-actions">
+                  {relationship.counterpart.kind !== "note" && (
+                    <span className={`node-kind kind-${relationship.counterpart.kind}`}>
+                      {relationship.counterpart.kind}
+                    </span>
+                  )}
+                  {relationship.external && (
+                    <a
+                      aria-label={`Open ${relationship.external.hostname} in a new tab`}
+                      href={relationship.external.url}
+                      rel="noopener noreferrer"
+                      target="_blank"
+                    >
+                      ↗
+                    </a>
+                  )}
+                  <button
+                    aria-controls={evidenceId}
+                    aria-expanded={isExpanded}
+                    className="evidence-toggle"
+                    onClick={() => toggleEvidence(relationship.edgeId)}
+                    type="button"
+                  >
+                    {relationship.evidence.length} source
+                    {relationship.evidence.length === 1 ? "" : "s"}
+                    <span aria-hidden="true">⌄</span>
+                  </button>
+                </div>
               </div>
-            ))}
-          </article>
-        );
-      })}
+              <div className="relationship-evidence" hidden={!isExpanded} id={evidenceId}>
+                {relationship.evidence.map((item) => (
+                  <div
+                    className="source-context"
+                    key={`${item.edgeId}-${item.range.startLine}-${item.range.startColumn}-${item.range.endLine}-${item.range.endColumn}`}
+                  >
+                    {item.origin === "frontmatter" ? (
+                      <p>
+                        Property: <strong>{item.type}</strong>
+                      </p>
+                    ) : (
+                      <blockquote>{item.excerpt}</blockquote>
+                    )}
+                    <span>{evidenceLocation(item, manifest)}</span>
+                  </div>
+                ))}
+              </div>
+            </article>
+          );
+        })}
+      </div>
     </section>
   );
 }
 
-export function Reader({ manifest, selected, onSelect }: Props) {
+export function Reader({ manifest, selected, onClose, onSelect }: Props) {
   const [details, setDetails] = useState<NodeDetails>();
   const [error, setError] = useState<string>();
   const node = manifest.nodes.find((item) => item.id === selected);
@@ -102,15 +172,7 @@ export function Reader({ manifest, selected, onSelect }: Props) {
     };
   }, [node]);
 
-  if (!node) {
-    return (
-      <aside className="reader reader-empty">
-        <p className="eyebrow">Knowledge context</p>
-        <h2>Select a node</h2>
-        <p>Inspect its note, dependencies, evidence, backlinks, and exact source occurrences.</p>
-      </aside>
-    );
-  }
+  if (!node) return null;
 
   const navigateInternalLink = (targetElement: EventTarget | null, preventDefault: () => void) => {
     const anchor = (targetElement as HTMLElement | null)?.closest("a");
@@ -123,7 +185,7 @@ export function Reader({ manifest, selected, onSelect }: Props) {
   };
 
   return (
-    <aside className="reader" data-testid="reader">
+    <aside aria-label="Reader" className="reader" data-testid="reader">
       <header className="reader-header">
         <div>
           <p className="eyebrow">
@@ -133,12 +195,7 @@ export function Reader({ manifest, selected, onSelect }: Props) {
           <h2>{node.title}</h2>
           {node.path && <p className="node-path">{node.path}</p>}
         </div>
-        <button
-          className="close-reader"
-          type="button"
-          aria-label="Close reader"
-          onClick={() => onSelect("")}
-        >
+        <button aria-label="Close reader" className="close-reader" onClick={onClose} type="button">
           ×
         </button>
       </header>
@@ -169,20 +226,7 @@ export function Reader({ manifest, selected, onSelect }: Props) {
         </p>
       )}
       {details && (
-        <EvidenceList
-          title="Outgoing"
-          evidence={details.outgoing}
-          manifest={manifest}
-          onSelect={onSelect}
-        />
-      )}
-      {details && (
-        <EvidenceList
-          title="Incoming"
-          evidence={details.incoming}
-          manifest={manifest}
-          onSelect={onSelect}
-        />
+        <Relationships details={details} key={details.id} manifest={manifest} onSelect={onSelect} />
       )}
     </aside>
   );

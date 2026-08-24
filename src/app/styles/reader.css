@@ -1,0 +1,481 @@
+.reader-pane {
+  position: relative;
+  z-index: 6;
+  flex: 0 0 var(--reader-width);
+  width: var(--reader-width);
+  min-width: 0;
+  height: 100%;
+  border-left: 1px solid var(--line);
+  background: var(--panel);
+  transition:
+    width 180ms ease,
+    flex-basis 180ms ease;
+}
+
+.reader-pane.is-closed {
+  border-left-color: transparent;
+}
+
+.reader-pane.is-resizing {
+  transition: none;
+}
+
+.reader-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -5px;
+  z-index: 8;
+  width: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline-offset: -2px;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.reader-resizer::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 1px;
+  background: var(--line);
+  content: "";
+  transition: background 140ms ease;
+}
+
+.reader-resizer:hover::after,
+.reader-resizer:focus-visible::after,
+.reader-pane.is-resizing .reader-resizer::after {
+  background: var(--text);
+}
+
+.reader {
+  height: 100%;
+  overflow: auto;
+  background: var(--panel);
+}
+
+.reader-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  gap: 20px;
+  justify-content: space-between;
+  padding: 26px 28px 20px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(29, 31, 34, 0.92);
+  backdrop-filter: blur(18px);
+}
+
+.reader-header > div {
+  min-width: 0;
+}
+
+.reader-header h2 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 27px;
+  font-weight: 620;
+  line-height: 1.08;
+  letter-spacing: -0.038em;
+}
+
+.node-path {
+  margin: 8px 0 0;
+  overflow-wrap: anywhere;
+  color: var(--subtle);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 9px;
+}
+
+.close-reader {
+  display: grid;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  place-items: center;
+  width: 29px;
+  height: 29px;
+  padding: 0 0 2px;
+  border: 0;
+  border-radius: 50%;
+  color: var(--muted);
+  background: transparent;
+  font-size: 21px;
+  cursor: pointer;
+}
+
+.close-reader:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 15px 28px 0;
+}
+
+.tag-row span,
+.node-kind {
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.note-content {
+  padding: 20px 28px 28px;
+  overflow-wrap: anywhere;
+  color: var(--secondary);
+  font-size: 14px;
+  line-height: 1.68;
+}
+
+.note-content h1 {
+  display: none;
+}
+
+.note-content h2,
+.note-content h3,
+.note-content h4 {
+  color: var(--text);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.note-content h2 {
+  margin-top: 1.7em;
+  font-size: 19px;
+}
+
+.note-content h3 {
+  margin-top: 1.5em;
+  font-size: 16px;
+}
+
+.note-content a {
+  color: var(--text);
+  text-decoration-color: var(--subtle);
+  text-underline-offset: 3px;
+}
+
+.note-content a:hover {
+  text-decoration-color: var(--text);
+}
+
+.note-content img {
+  max-width: 100%;
+  border-radius: 10px;
+  filter: grayscale(1);
+}
+
+.note-content code {
+  padding: 2px 5px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--text);
+  background: var(--surface);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.82em;
+}
+
+.note-content pre {
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #202225;
+}
+
+.note-content pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.note-content blockquote {
+  margin: 18px 0;
+  padding: 2px 14px;
+  border-left: 2px solid var(--secondary);
+  color: var(--muted);
+}
+
+.note-content .callout {
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--text);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.reader-loading,
+.empty-note,
+.error {
+  padding: 28px;
+  color: var(--muted);
+}
+
+.relationships {
+  padding: 22px 28px 32px;
+  border-top: 1px solid var(--line);
+}
+
+.relationships > h3 {
+  margin: 0 0 13px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.relationship-list {
+  display: grid;
+  gap: 8px;
+}
+
+.relationship {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #202225;
+}
+
+.relationship:hover {
+  border-color: var(--line-strong);
+}
+
+.relationship-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 11px 12px;
+}
+
+.relationship-target {
+  display: grid;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  color: var(--secondary);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.relationship-target:hover strong {
+  color: var(--text);
+}
+
+.relationship-type {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.relationship-type i {
+  width: 12px;
+  color: var(--secondary);
+  font-style: normal;
+}
+
+.relationship-target strong,
+.relationship-target small {
+  overflow-wrap: anywhere;
+}
+
+.relationship-target strong {
+  color: var(--secondary);
+  font-size: 12px;
+  font-weight: 560;
+  line-height: 1.35;
+}
+
+.relationship-target small {
+  margin-top: 3px;
+  color: var(--subtle);
+  font-size: 9px;
+  line-height: 1.35;
+}
+
+.relationship-actions {
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+}
+
+.relationship-actions > a {
+  display: grid;
+  place-items: center;
+  width: 25px;
+  height: 25px;
+  border-radius: 7px;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.relationship-actions > a:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.evidence-toggle {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 8px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.evidence-toggle:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.evidence-toggle span {
+  transition: transform 140ms ease;
+}
+
+.evidence-toggle[aria-expanded="true"] span {
+  transform: rotate(180deg);
+}
+
+.relationship-evidence {
+  border-top: 1px solid var(--line);
+}
+
+.source-context {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 12px 12px;
+}
+
+.source-context + .source-context {
+  border-top: 1px solid var(--line);
+}
+
+.source-context p,
+.source-context blockquote {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+  line-height: 1.5;
+}
+
+.source-context p strong {
+  color: var(--secondary);
+  font-weight: 550;
+}
+
+.source-context span {
+  overflow-wrap: anywhere;
+  color: var(--subtle);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 8px;
+}
+
+@media (max-width: 760px) {
+  .reader-pane {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 14;
+    flex: none;
+    width: 100%;
+    height: var(--reader-sheet-height);
+    overflow: visible;
+    border: 1px solid var(--line-strong);
+    border-bottom: 0;
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -24px 70px rgba(0, 0, 0, 0.28);
+    transition: height 180ms ease;
+  }
+
+  .reader-pane.is-closed {
+    height: 0;
+    border-color: transparent;
+  }
+
+  .reader-pane.is-resizing {
+    transition: none;
+  }
+
+  .reader-resizer {
+    top: -8px;
+    right: 0;
+    bottom: auto;
+    left: 0;
+    width: 100%;
+    height: 16px;
+    cursor: row-resize;
+  }
+
+  .reader-resizer::after {
+    top: 6px;
+    right: auto;
+    bottom: auto;
+    left: 50%;
+    width: 36px;
+    height: 4px;
+    border-radius: 4px;
+    background: var(--subtle);
+    transform: translateX(-50%);
+  }
+
+  .reader {
+    border-radius: 18px 18px 0 0;
+  }
+
+  .reader-header {
+    padding: 25px 20px 18px;
+  }
+
+  .reader-header h2 {
+    font-size: 25px;
+  }
+
+  .tag-row,
+  .note-content,
+  .relationships {
+    padding-right: 20px;
+    padding-left: 20px;
+  }
+}
+
+@media (max-width: 420px) {
+  .relationship-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .relationship-actions {
+    display: flex;
+    justify-content: flex-start;
+  }
+}

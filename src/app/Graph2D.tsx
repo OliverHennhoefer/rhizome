@@ -1,13 +1,30 @@
 import { useEffect, useRef, useState } from "react";
+import type { GraphManifest } from "../shared/contracts";
+import { GraphControls } from "./GraphControls";
 import type { GraphProjection, RhizomeGraph } from "./graph";
 import { isMotionEligible, type LayoutStatus } from "./graph-layout";
 import { GraphViewportSession } from "./graph-viewport";
 
+type FilterKey = "types" | "tags" | "relations";
+
 interface Props {
   graph: RhizomeGraph;
+  manifest: GraphManifest;
   projection: GraphProjection;
   selected?: string;
+  focus: boolean;
+  direction: "in" | "out" | "both";
+  depth: number;
+  filters: Record<FilterKey, Set<string>>;
+  readerOpen: boolean;
+  overviewRevision: number;
   onSelect: (id: string) => void;
+  onOverview: () => void;
+  onToggleFocus: (direction: "in" | "out") => void;
+  onDepthChange: (depth: number) => void;
+  onToggleFilter: (key: FilterKey, value: string) => void;
+  onClearFilters: () => void;
+  onToggleReader: () => void;
 }
 
 const MOTION_STORAGE_KEY = "rhizome:motion";
@@ -41,24 +58,28 @@ function useMediaQuery(query: string): boolean {
   return matches;
 }
 
-function layoutLabel(status: LayoutStatus): string {
-  switch (status) {
-    case "loading":
-      return "Preparing motion";
-    case "running":
-      return "Graph in motion";
-    case "settled":
-      return "Graph settled";
-    case "paused":
-      return "Motion paused";
-    case "static":
-      return "Static layout";
-  }
-}
-
-export function Graph2D({ graph, projection, selected, onSelect }: Props) {
+export function Graph2D({
+  graph,
+  manifest,
+  projection,
+  selected,
+  focus,
+  direction,
+  depth,
+  filters,
+  readerOpen,
+  overviewRevision,
+  onSelect,
+  onOverview,
+  onToggleFocus,
+  onDepthChange,
+  onToggleFilter,
+  onClearFilters,
+  onToggleReader,
+}: Props) {
   const container = useRef<HTMLDivElement>(null);
   const session = useRef<GraphViewportSession | undefined>(undefined);
+  const appliedOverviewRevision = useRef(overviewRevision);
   const compact = useMediaQuery("(pointer: coarse), (max-width: 720px)");
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const [motionOverride, setMotionOverride] = useState<boolean | undefined>(readMotionOverride);
@@ -73,23 +94,34 @@ export function Graph2D({ graph, projection, selected, onSelect }: Props) {
       onStatus: setStatus,
       onPinnedCount: setPinnedCount,
     });
+    const resizeObserver = new ResizeObserver(() => viewport.resize());
+    resizeObserver.observe(container.current);
     session.current = viewport;
     return () => {
+      resizeObserver.disconnect();
       session.current = undefined;
       viewport.destroy();
     };
   }, [graph]);
 
   useEffect(() => {
-    session.current?.sync({
+    const viewport = session.current;
+    if (!viewport) return;
+    const fitOverview = appliedOverviewRevision.current !== overviewRevision;
+    viewport.sync({
       projection,
       selected,
       motionEnabled,
       compact,
       reducedMotion,
+      settleProjection: fitOverview,
       onSelect,
     });
-  }, [compact, motionEnabled, onSelect, projection, reducedMotion, selected]);
+    if (fitOverview) {
+      appliedOverviewRevision.current = overviewRevision;
+      viewport.fitOverview();
+    }
+  }, [compact, motionEnabled, onSelect, overviewRevision, projection, reducedMotion, selected]);
 
   const toggleMotion = () => {
     const next = !motionEnabled;
@@ -106,37 +138,29 @@ export function Graph2D({ graph, projection, selected, onSelect }: Props) {
         data-testid="graph-2d"
         ref={container}
       />
-      <div className="graph-toolbar" aria-label="Graph layout controls" role="toolbar">
-        <span aria-live="polite" className={`layout-status status-${status}`}>
-          <i aria-hidden="true" />
-          {layoutLabel(status)}
-        </span>
-        <button
-          aria-pressed={motionEnabled}
-          disabled={!eligible}
-          onClick={toggleMotion}
-          title={
-            !eligible
-              ? projection.nodes.size <= 1
-                ? "Motion requires at least two visible nodes"
-                : "Focus or filter the graph to enable motion"
-              : undefined
-          }
-          type="button"
-        >
-          Motion {motionEnabled ? "on" : "off"}
-        </button>
-        <button onClick={() => session.current?.resetLayout()} type="button">
-          Reset layout
-        </button>
-      </div>
-      <div className="graph-help">
-        {status === "static"
-          ? "Focus or filter to enable motion"
-          : compact
-            ? "Drag nodes to explore"
-            : "Drag nodes · Shift-drag to pin"}
-      </div>
+      <GraphControls
+        compact={compact}
+        depth={depth}
+        direction={direction}
+        filters={filters}
+        focus={focus}
+        manifest={manifest}
+        motionEligible={eligible}
+        motionEnabled={motionEnabled}
+        onClearFilters={onClearFilters}
+        onDepthChange={onDepthChange}
+        onOverview={onOverview}
+        onResetLayout={() => session.current?.resetLayout()}
+        onToggleFilter={onToggleFilter}
+        onToggleFocus={onToggleFocus}
+        onToggleMotion={toggleMotion}
+        onToggleReader={onToggleReader}
+        pinnedCount={pinnedCount}
+        projection={projection}
+        readerOpen={readerOpen}
+        selected={selected}
+        status={status}
+      />
     </>
   );
 }

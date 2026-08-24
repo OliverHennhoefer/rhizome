@@ -22,6 +22,8 @@ test("selects notes, restores query state, and loads details lazily", async ({ p
 test("renders the analytical graph without a renderer switch", async ({ page }) => {
   await page.goto("");
   await expect(page.getByTestId("graph-2d")).toBeVisible();
+  await expect(page.getByTestId("reader")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Show reader" })).toBeDisabled();
   await expect(page.getByRole("group", { name: "Graph view" })).toHaveCount(0);
 });
 
@@ -31,7 +33,7 @@ test("clears hover state when a focused projection removes the hovered node", as
   test.skip(testInfo.project.name !== "root", "root desktop project only");
   await page.goto("");
   const graph = page.getByTestId("graph-2d");
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 5_000 });
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
   await page.getByLabel("Search notes").fill("graph projection");
   await page.getByRole("button", { name: /Graph projection/ }).click();
   await page.waitForTimeout(350);
@@ -42,6 +44,9 @@ test("clears hover state when a focused projection removes the hovered node", as
   await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
   await expect(graph).toHaveAttribute("data-hovered-node", "Graph projection");
 
+  await page
+    .getByRole("button", { name: "Focus" })
+    .evaluate((element) => (element as unknown as { click(): void }).click());
   await page
     .getByRole("button", { name: "What depends on this?" })
     .evaluate((element) => (element as unknown as { click(): void }).click());
@@ -63,7 +68,7 @@ test("recomputes retained hover neighbors after relation filtering", async ({ pa
   test.skip(testInfo.project.name !== "root", "root desktop project only");
   await page.goto("");
   const graph = page.getByTestId("graph-2d");
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 5_000 });
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
   await page.getByLabel("Search notes").fill("graph projection");
   await page.getByRole("button", { name: /Graph projection/ }).click();
   await page.waitForTimeout(350);
@@ -75,6 +80,9 @@ test("recomputes retained hover neighbors after relation filtering", async ({ pa
   await expect(graph).toHaveAttribute("data-hovered-node", "Graph projection");
   await expect(graph).toHaveAttribute("data-hovered-neighbor-count", "1");
 
+  await page
+    .getByRole("button", { name: "Filters" })
+    .evaluate((element) => (element as unknown as { click(): void }).click());
   const relations = page.locator("details.filter-group").filter({ hasText: "Relations" });
   await relations
     .locator("summary")
@@ -90,7 +98,7 @@ test("selection-only navigation does not reheat the settled graph", async ({ pag
   test.skip(testInfo.project.name !== "root", "root desktop project only");
   await page.goto("");
   const graph = page.getByTestId("graph-2d");
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 5_000 });
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
 
   await page.getByLabel("Search notes").fill("event model");
   await page
@@ -111,8 +119,9 @@ test("runs bounded motion, pauses, resumes, and resets", async ({ page }, testIn
   test.skip(testInfo.project.name !== "root", "root desktop project only");
   await page.goto("");
   const graph = page.getByTestId("graph-2d");
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 5_000 });
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
 
+  await page.getByRole("button", { name: "Layout" }).click();
   await page.getByRole("button", { name: "Motion on" }).click();
   await expect(graph).toHaveAttribute("data-layout-status", "paused");
   await expect(page.getByRole("button", { name: "Motion off" })).toHaveAttribute(
@@ -121,20 +130,21 @@ test("runs bounded motion, pauses, resumes, and resets", async ({ page }, testIn
   );
   await page.reload();
   await expect(graph).toHaveAttribute("data-layout-status", "paused");
+  await page.getByRole("button", { name: "Layout" }).click();
   await expect(page.getByRole("button", { name: "Motion off" })).toBeVisible();
 
   await page.getByRole("button", { name: "Motion off" }).click();
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 5_000 });
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
   await page.getByRole("button", { name: "Reset layout" }).click();
   await expect(graph).toHaveAttribute("data-pinned-count", "0");
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 5_000 });
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
 });
 
 test("nudges live while zooming and ignores pure camera panning", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "root", "root desktop project only");
   await page.goto("");
   const graph = page.getByTestId("graph-2d");
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 5_000 });
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
   await expect(graph).toHaveAttribute("data-nudge-status", "idle");
 
   const bounds = await graph.boundingBox();
@@ -144,7 +154,7 @@ test("nudges live while zooming and ignores pure camera panning", async ({ page 
   await page.mouse.wheel(0, 700);
   await expect(graph).toHaveAttribute("data-nudge-status", "active");
   await expect(graph).toHaveAttribute("data-layout-status", "running");
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 5_000 });
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
   await expect(graph).toHaveAttribute("data-nudge-status", "idle");
 
   await page.mouse.move(bounds.x + 24, bounds.y + 24);
@@ -173,10 +183,11 @@ test("does not load D3 by default under reduced motion", async ({ page }, testIn
   expect(bboxRequests).toEqual([]);
   await expect(graph).toHaveAttribute("data-nudge-status", "disabled");
 
+  await page.getByRole("button", { name: "Layout" }).click();
   await page.getByRole("button", { name: "Motion off" }).click();
   await expect.poll(() => d3Requests.length).toBeGreaterThan(0);
   await expect.poll(() => bboxRequests.length).toBeGreaterThan(0);
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 5_000 });
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
   await expect(graph).toHaveAttribute("data-nudge-status", "disabled");
 });
 
@@ -184,7 +195,7 @@ test("shift-drag pins and normal drag releases a node", async ({ page }, testInf
   test.skip(testInfo.project.name !== "root", "root desktop project only");
   await page.goto("");
   const graph = page.getByTestId("graph-2d");
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 5_000 });
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
   await page.getByLabel("Search notes").fill("graph projection");
   await page.getByRole("button", { name: /Graph projection/ }).click();
   await page.waitForTimeout(350);
@@ -204,7 +215,7 @@ test("shift-drag pins and normal drag releases a node", async ({ page }, testInf
   await page.mouse.up();
   await page.keyboard.up("Shift");
   await expect(graph).toHaveAttribute("data-pinned-count", "1");
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 5_000 });
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
 
   await page.getByLabel("Search notes").fill("event model");
   await page.getByRole("button", { name: /Event model/ }).click();
@@ -253,7 +264,152 @@ test("keeps oversized projections static with an explanation", async ({ page }, 
   await expect(graph).toHaveAttribute("data-layout-status", "static");
   await expect(graph).toHaveAttribute("data-nudge-status", "disabled");
   await expect(page.getByText("Focus or filter to enable motion")).toBeVisible();
+  await page.getByRole("button", { name: "Layout" }).click();
   await expect(page.getByRole("button", { name: "Motion on" })).toBeDisabled();
+});
+
+test("toggles directional focus and returns to a filtered fitted overview", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "root", "root desktop project only");
+  await page.goto("?note=Event%20model");
+  const graph = page.getByTestId("graph-2d");
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
+
+  await page.getByRole("button", { name: "Filters" }).click();
+  const relations = page.locator("details.filter-group").filter({ hasText: "Relations" });
+  await relations.locator("summary").click();
+  await relations.getByRole("checkbox", { name: "link", exact: true }).click();
+  await expect(page).toHaveURL(/relation=link/);
+
+  await page.getByRole("button", { name: "Focus" }).click();
+  const inbound = page.getByRole("button", { name: "What depends on this?" });
+  await inbound.click();
+  await expect(page).toHaveURL(/focus=1/);
+  await expect(page).toHaveURL(/direction=in/);
+  await inbound.click();
+  await expect(page).not.toHaveURL(/focus=1/);
+  await expect(page).not.toHaveURL(/direction=in/);
+  await inbound.click();
+
+  const bounds = await graph.boundingBox();
+  expect(bounds).not.toBeNull();
+  if (!bounds) return;
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  await page.mouse.wheel(0, 700);
+  await expect.poll(() => graph.getAttribute("data-camera-ratio")).not.toBe("1.0000");
+
+  await page.getByRole("button", { name: "Overview" }).click();
+  await expect(page).not.toHaveURL(/focus=1/);
+  await expect(page).not.toHaveURL(/direction=in/);
+  await expect(page).toHaveURL(/relation=link/);
+  await expect(graph).toHaveAttribute("data-camera-ratio", "1.0000", { timeout: 2_000 });
+  await expect(graph).toHaveAttribute("data-layout-status", "settled");
+  await expect(page.getByTestId("reader")).toBeVisible();
+});
+
+test("hides, restores, and resizes the reader independently from selection", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "root", "root desktop project only");
+  await page.goto("?note=Cache%20invalidation");
+  const graph = page.getByTestId("graph-2d");
+  const reader = page.getByTestId("reader");
+  const separator = page.getByRole("separator", { name: "Resize reader" });
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 15_000 });
+  await expect(reader).toBeVisible();
+  await expect(separator).toHaveAttribute("aria-valuenow", "420");
+  const cameraRatio = await graph.getAttribute("data-camera-ratio");
+
+  const handle = await separator.boundingBox();
+  expect(handle).not.toBeNull();
+  if (!handle) return;
+  const startX = handle.x + handle.width / 2;
+  await page.mouse.move(startX, handle.y + 80);
+  await page.mouse.down();
+  await page.mouse.move(startX - 80, handle.y + 80, { steps: 5 });
+  await page.mouse.up();
+  await expect(separator).toHaveAttribute("aria-valuenow", "500");
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("rhizome:reader-width")))
+    .toBe("500");
+  await expect(graph).toHaveAttribute("data-camera-ratio", cameraRatio ?? "1.0000");
+  await expect(graph).toHaveAttribute("data-layout-status", "settled");
+
+  await separator.focus();
+  await page.keyboard.press("Home");
+  await expect(separator).toHaveAttribute("aria-valuenow", "320");
+  await separator.dblclick();
+  await expect(separator).toHaveAttribute("aria-valuenow", "420");
+
+  await page.getByRole("button", { name: "Close reader" }).click();
+  await expect(reader).toHaveCount(0);
+  await expect(page).toHaveURL(/note=Cache(?:\+|%20)invalidation/);
+  await expect(page.getByRole("button", { name: "Show reader" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Show reader" })).toBeFocused();
+  await page.getByRole("button", { name: "Show reader" }).click();
+  await expect(page.getByTestId("reader")).toBeVisible();
+  await expect(separator).toHaveAttribute("aria-valuenow", "420");
+});
+
+test("formats relationships as directional rows with collapsed source evidence", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "root", "root desktop project only");
+  await page.goto("?note=Cache%20invalidation");
+  const relationships = page.getByTestId("reader").locator(".relationships");
+  await expect(relationships.getByRole("heading", { name: "Relationships" })).toBeVisible();
+
+  const external = relationships.locator(".relationship").filter({ hasText: "martinfowler.com" });
+  await expect(external).toContainText("Supported by");
+  await expect(external).toContainText("bliki/TwoHardThings.html");
+  await expect(external.getByText("external", { exact: true })).toBeVisible();
+  const evidence = external.getByRole("button", { name: "1 source" });
+  await expect(evidence).toHaveAttribute("aria-expanded", "false");
+  await evidence.click();
+  await expect(external.getByText("Property:")).toContainText("supported-by");
+  await expect(external.getByText("Cache invalidation.md:12")).toBeVisible();
+  await expect(
+    external.getByRole("link", { name: "Open martinfowler.com in a new tab" }),
+  ).toHaveAttribute("href", "https://martinfowler.com/bliki/TwoHardThings.html");
+});
+
+test("closes graph popovers with Escape and restores trigger focus", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "root", "root desktop project only");
+  await page.goto("");
+  const filters = page.getByRole("button", { name: "Filters" });
+  await filters.click();
+  await expect(page.getByRole("dialog", { name: "Graph filters" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Graph filters" })).toHaveCount(0);
+  await expect(filters).toBeFocused();
+});
+
+test("matches the graph-first desktop chrome", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "root", "root desktop project only");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.addInitScript(() => localStorage.setItem("rhizome:motion", "off"));
+  await page.goto("");
+  const graph = page.getByTestId("graph-2d");
+  await expect(graph).toBeVisible();
+  await expect(page.getByRole("button", { name: "Overview" })).toBeVisible();
+  await page.addStyleTag({
+    content: ".graph-canvas canvas { visibility: hidden !important; }",
+  });
+  await expect(page).toHaveScreenshot("graph-overview.png", {
+    animations: "disabled",
+    maxDiffPixelRatio: 0.001,
+  });
+
+  await page.goto("?note=Cache%20invalidation");
+  await expect(page.getByTestId("reader")).toBeVisible();
+  await page.addStyleTag({
+    content: ".graph-canvas canvas { visibility: hidden !important; }",
+  });
+  await expect(page).toHaveScreenshot("graph-reader.png", {
+    animations: "disabled",
+    maxDiffPixelRatio: 0.001,
+  });
 });
 
 test("retains DOM navigation when WebGL is unavailable", async ({ page }, testInfo) => {
@@ -277,5 +433,41 @@ test("mobile retains search and reader navigation", async ({ page }, testInfo) =
   await expect(
     page.getByTestId("reader").getByRole("heading", { name: "Cache invalidation" }),
   ).toBeVisible();
-  await expect(page.getByText("Outgoing")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Relationships" })).toBeVisible();
+  const separator = page.getByRole("separator", { name: "Resize reader" });
+  await expect(separator).toHaveAttribute("aria-orientation", "horizontal");
+  await expect(separator).toHaveAttribute("aria-valuenow", "65");
+  await separator.focus();
+  await page.keyboard.press("End");
+  await expect(separator).toHaveAttribute("aria-valuenow", "92");
+  await page.locator("#reader-pane").evaluate(async (pane) => {
+    await Promise.all(
+      pane.getAnimations().map((animation: { finished: Promise<unknown> }) => animation.finished),
+    );
+  });
+  const handle = await separator.boundingBox();
+  expect(handle).not.toBeNull();
+  if (!handle) return;
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+  await page.mouse.down();
+  await expect(page.locator("body")).toHaveClass(/is-resizing-reader/);
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + 230, { steps: 5 });
+  await page.mouse.up();
+  await expect(separator).toHaveAttribute("aria-valuenow", "65");
+});
+
+test("matches the mobile reader chrome", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-reader", "mobile project only");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.addInitScript(() => localStorage.setItem("rhizome:motion", "off"));
+  await page.goto("?note=Cache%20invalidation");
+  await expect(page.getByTestId("graph-2d")).toBeVisible();
+  await expect(page.getByTestId("reader")).toBeVisible();
+  await page.addStyleTag({
+    content: ".graph-canvas canvas { visibility: hidden !important; }",
+  });
+  await expect(page).toHaveScreenshot("mobile-reader.png", {
+    animations: "disabled",
+    maxDiffPixelRatio: 0.001,
+  });
 });

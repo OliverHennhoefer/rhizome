@@ -263,7 +263,7 @@ export class GraphMotionController {
     this.onPinnedChange = options.onPinnedChange;
   }
 
-  async start(): Promise<void> {
+  async start(settled = false): Promise<void> {
     this.onStatus("loading");
     const [d3, bbox] = await Promise.all([import("d3-force"), import("d3-bboxCollide")]);
     if (this.killed) return;
@@ -338,7 +338,13 @@ export class GraphMotionController {
         this.clearNudgeState();
         if (!this.killed) this.onStatus("settled");
       });
-    this.onStatus("running");
+    if (settled) {
+      this.simulation.stop().alpha(0);
+      this.syncPositions();
+      this.onStatus("settled");
+    } else {
+      this.onStatus("running");
+    }
   }
 
   private releaseTemporarySelection(): void {

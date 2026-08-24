@@ -2,9 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import type { GraphManifest } from "../shared/contracts";
 import { Graph2D } from "./Graph2D";
 import { createGraph, projectGraph } from "./graph";
-import { relationTone } from "./graph-theme";
 import { Reader } from "./Reader";
+import { ReaderPane } from "./ReaderPane";
+import { toggleDirectionalFocus } from "./ui-state";
 import { readUrlState, type UrlState, writeUrlState } from "./url-state";
+
+type FilterKey = "types" | "tags" | "relations";
 
 function hasWebGl(): boolean {
   try {
@@ -15,40 +18,13 @@ function hasWebGl(): boolean {
   }
 }
 
-function ToggleGroup({
-  title,
-  values,
-  active,
-  onToggle,
-}: {
-  title: string;
-  values: string[];
-  active: Set<string>;
-  onToggle: (value: string) => void;
-}) {
-  if (values.length === 0) return null;
-  return (
-    <details className="filter-group">
-      <summary>
-        {title}
-        <span>{active.size || "All"}</span>
-      </summary>
-      <div className="filter-options">
-        {values.map((value) => (
-          <label key={value}>
-            <input type="checkbox" checked={active.has(value)} onChange={() => onToggle(value)} />
-            <span>{value}</span>
-          </label>
-        ))}
-      </div>
-    </details>
-  );
-}
-
 export function App() {
+  const [initialState] = useState<UrlState>(() => readUrlState());
   const [manifest, setManifest] = useState<GraphManifest>();
   const [loadError, setLoadError] = useState<string>();
-  const [state, setState] = useState<UrlState>(() => readUrlState());
+  const [state, setState] = useState<UrlState>(initialState);
+  const [readerOpen, setReaderOpen] = useState(Boolean(initialState.note));
+  const [overviewRevision, setOverviewRevision] = useState(0);
   const [search, setSearch] = useState("");
   const webgl = useMemo(hasWebGl, []);
 
@@ -61,8 +37,12 @@ export function App() {
       .then((value) => {
         setManifest(value);
         const url = readUrlState();
-        if (!url.note && value.nodes.length)
-          url.note = value.nodes.find((node) => node.kind === "note")?.id;
+        if (url.note && !value.nodes.some((node) => node.id === url.note)) {
+          url.note = undefined;
+          url.focus = false;
+          url.direction = "both";
+        }
+        setReaderOpen(Boolean(url.note));
         setState(url);
         document.title = value.config.site.title;
       })
@@ -87,6 +67,10 @@ export function App() {
         : undefined,
     [graph, state.depth, state.direction, focusNode, state.relations, state.tags, state.types],
   );
+  const filters = useMemo(
+    () => ({ types: state.types, tags: state.tags, relations: state.relations }),
+    [state.relations, state.tags, state.types],
+  );
 
   const results = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
@@ -101,14 +85,35 @@ export function App() {
   }, [manifest, search]);
 
   const update = (change: Partial<UrlState>) => setState((current) => ({ ...current, ...change }));
-  const select = (note: string) => update({ note: note || undefined });
-  const toggle = (key: "types" | "tags" | "relations", value: string) => {
+  const select = (note: string) => {
+    if (!note) return;
+    update({ note });
+    setReaderOpen(true);
+  };
+  const toggleFilter = (key: FilterKey, value: string) => {
     setState((current) => {
       const next = new Set(current[key]);
       if (next.has(value)) next.delete(value);
       else next.add(value);
       return { ...current, [key]: next };
     });
+  };
+  const clearFilters = () =>
+    update({ types: new Set<string>(), tags: new Set<string>(), relations: new Set<string>() });
+  const toggleFocus = (direction: "in" | "out") =>
+    setState((current) => ({
+      ...current,
+      ...toggleDirectionalFocus(current, direction),
+    }));
+  const showOverview = () => {
+    update({ focus: false, direction: "both" });
+    setOverviewRevision((current) => current + 1);
+  };
+  const closeReaderFromContent = () => {
+    setReaderOpen(false);
+    requestAnimationFrame(() =>
+      document.querySelector<HTMLButtonElement>('button[aria-label="Show reader"]')?.focus(),
+    );
   };
 
   if (loadError)
@@ -125,36 +130,32 @@ export function App() {
       </main>
     );
 
-  const relationNames = Object.keys(manifest.facets.relations).sort();
   return (
-    <main className={`app-shell ${state.note ? "has-reader" : ""}`}>
+    <main className="app-shell">
       <header className="app-header">
         <a className="brand" href={import.meta.env.BASE_URL}>
-          <span className="brand-mark" aria-hidden="true">
+          <span aria-hidden="true" className="brand-mark">
             R
           </span>
-          <span>
-            <strong>{manifest.config.site.title}</strong>
-            <small>Graph-native Markdown</small>
-          </span>
+          <strong>{manifest.config.site.title}</strong>
         </a>
         <div className="search-wrap">
           <input
             aria-label="Search notes"
-            placeholder="Search titles, aliases, paths, tags…"
-            value={search}
             onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search notes, aliases, paths, and tags"
+            value={search}
           />
           {results.length > 0 && (
             <div className="search-results">
               {results.map((node) => (
                 <button
                   key={node.id}
-                  type="button"
                   onClick={() => {
                     select(node.id);
                     setSearch("");
                   }}
+                  type="button"
                 >
                   <span>{node.title}</span>
                   <small>{node.path ?? node.kind}</small>
@@ -165,104 +166,56 @@ export function App() {
         </div>
       </header>
 
-      <aside className="controls">
-        <div className="graph-stats">
-          <span>
-            <strong>{projection.nodes.size}</strong> nodes
-          </span>
-          <span>
-            <strong>{projection.edges.size}</strong> relations
-          </span>
-        </div>
-        {state.note && (
-          <section className="focus-tools">
-            <p className="eyebrow">Directional focus</p>
-            <button
-              type="button"
-              className={state.focus && state.direction === "in" ? "active" : ""}
-              onClick={() => update({ focus: true, direction: "in" })}
-            >
-              What depends on this?
-            </button>
-            <button
-              type="button"
-              className={state.focus && state.direction === "out" ? "active" : ""}
-              onClick={() => update({ focus: true, direction: "out" })}
-            >
-              What does this depend on?
-            </button>
-            <div className="depth-control">
-              <label htmlFor="depth">
-                Depth <strong>{state.depth}</strong>
-              </label>
-              <input
-                id="depth"
-                type="range"
-                min="1"
-                max="5"
-                value={state.depth}
-                onChange={(event) => update({ depth: Number(event.target.value) })}
-              />
+      <div className="workspace">
+        <section className="stage">
+          {!webgl ? (
+            <div className="webgl-fallback">
+              <h2>Graph rendering unavailable</h2>
+              <p>Search and relationship navigation remain available in this browser.</p>
+              {state.note && (
+                <button onClick={() => setReaderOpen((current) => !current)} type="button">
+                  {readerOpen ? "Hide reader" : "Show reader"}
+                </button>
+              )}
             </div>
-            {state.focus && (
-              <button
-                className="subtle"
-                type="button"
-                onClick={() => update({ focus: false, direction: "both" })}
-              >
-                Show full graph
-              </button>
-            )}
-          </section>
-        )}
-        <section className="filters">
-          <p className="eyebrow">Filter projection</p>
-          <ToggleGroup
-            title="Types"
-            values={Object.keys(manifest.facets.types).sort()}
-            active={state.types}
-            onToggle={(value) => toggle("types", value)}
-          />
-          <ToggleGroup
-            title="Tags"
-            values={Object.keys(manifest.facets.tags).sort()}
-            active={state.tags}
-            onToggle={(value) => toggle("tags", value)}
-          />
-          <ToggleGroup
-            title="Relations"
-            values={relationNames}
-            active={state.relations}
-            onToggle={(value) => toggle("relations", value)}
-          />
+          ) : (
+            <Graph2D
+              depth={state.depth}
+              direction={state.direction}
+              filters={filters}
+              focus={state.focus}
+              graph={graph}
+              manifest={manifest}
+              onClearFilters={clearFilters}
+              onDepthChange={(depth) => update({ depth })}
+              onOverview={showOverview}
+              onSelect={select}
+              onToggleFilter={toggleFilter}
+              onToggleFocus={toggleFocus}
+              onToggleReader={() => state.note && setReaderOpen((current) => !current)}
+              overviewRevision={overviewRevision}
+              projection={projection}
+              readerOpen={readerOpen}
+              selected={state.note}
+            />
+          )}
         </section>
-        <section className="legend">
-          {relationNames.map((relation) => (
-            <span key={relation}>
-              <i style={{ background: relationTone(relation) }} />
-              {manifest.config.relations[relation]?.label ?? relation}
-            </span>
-          ))}
-        </section>
-      </aside>
 
-      <section className="stage">
-        {!webgl ? (
-          <div className="webgl-fallback">
-            <h2>Graph rendering unavailable</h2>
-            <p>Search and relationship navigation remain available in this browser.</p>
-          </div>
-        ) : (
-          <Graph2D graph={graph} projection={projection} selected={state.note} onSelect={select} />
+        {state.note && (
+          <ReaderPane
+            onClose={() => setReaderOpen(false)}
+            onOpen={() => setReaderOpen(true)}
+            open={readerOpen}
+          >
+            <Reader
+              manifest={manifest}
+              onClose={closeReaderFromContent}
+              onSelect={select}
+              selected={state.note}
+            />
+          </ReaderPane>
         )}
-        <div className="stage-hint">
-          {state.focus
-            ? `${state.direction === "in" ? "Inbound" : "Outbound"} · ${state.depth} hop${state.depth === 1 ? "" : "s"}`
-            : "Select a node to interrogate its context"}
-        </div>
-      </section>
-
-      <Reader manifest={manifest} selected={state.note} onSelect={select} />
+      </div>
     </main>
   );
 }

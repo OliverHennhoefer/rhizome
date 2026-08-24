@@ -5,6 +5,7 @@ export default defineConfig({
   fullyParallel: true,
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? "github" : "list",
+  snapshotPathTemplate: "{testDir}/{testFilePath}-snapshots/{arg}-{projectName}{ext}",
   use: {
     trace: "on-first-retry",
     viewport: { width: 1440, height: 900 },
