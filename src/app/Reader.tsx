@@ -5,8 +5,13 @@ import { buildRelationshipViews, type RelationshipDirection } from "./relationsh
 interface Props {
   manifest: GraphManifest;
   selected: string;
+  focus: boolean;
+  direction: "in" | "out" | "both";
+  depth: number;
   onClose: () => void;
   onSelect: (id: string) => void;
+  onToggleFocus: (direction: "in" | "out") => void;
+  onDepthChange: (depth: number) => void;
 }
 
 const detailsCache = new Map<string, Promise<NodeDetails>>();
@@ -40,6 +45,53 @@ function directionGlyph(direction: RelationshipDirection): string {
 function evidenceLocation(item: EdgeEvidence, manifest: GraphManifest): string {
   const source = manifest.nodes.find((node) => node.id === item.source);
   return `${source?.path ?? item.source}:${item.range.startLine}`;
+}
+
+function ReaderFocus({
+  focus,
+  direction,
+  depth,
+  onToggleFocus,
+  onDepthChange,
+}: Pick<Props, "focus" | "direction" | "depth" | "onToggleFocus" | "onDepthChange">) {
+  return (
+    <section aria-label="Graph focus" className="reader-focus">
+      <h3>Explore this note</h3>
+      <div className="reader-focus-options">
+        <button
+          aria-pressed={focus && direction === "in"}
+          onClick={() => onToggleFocus("in")}
+          type="button"
+        >
+          <span>What depends on this?</span>
+          <small>Inbound</small>
+        </button>
+        <button
+          aria-pressed={focus && direction === "out"}
+          onClick={() => onToggleFocus("out")}
+          type="button"
+        >
+          <span>What does this depend on?</span>
+          <small>Outbound</small>
+        </button>
+      </div>
+      {focus && (
+        <label className="reader-focus-depth" htmlFor="reader-focus-depth">
+          <span>
+            Depth <strong>{depth}</strong>
+          </span>
+          <input
+            id="reader-focus-depth"
+            max="5"
+            min="1"
+            onChange={(event) => onDepthChange(Number(event.target.value))}
+            type="range"
+            value={depth}
+          />
+        </label>
+      )}
+    </section>
+  );
 }
 
 function Relationships({
@@ -156,7 +208,17 @@ function Relationships({
   );
 }
 
-export function Reader({ manifest, selected, onClose, onSelect }: Props) {
+export function Reader({
+  manifest,
+  selected,
+  focus,
+  direction,
+  depth,
+  onClose,
+  onSelect,
+  onToggleFocus,
+  onDepthChange,
+}: Props) {
   const [details, setDetails] = useState<NodeDetails>();
   const [error, setError] = useState<string>();
   const node = manifest.nodes.find((item) => item.id === selected);
@@ -205,6 +267,13 @@ export function Reader({ manifest, selected, onClose, onSelect }: Props) {
           ×
         </button>
       </header>
+      <ReaderFocus
+        depth={depth}
+        direction={direction}
+        focus={focus}
+        onDepthChange={onDepthChange}
+        onToggleFocus={onToggleFocus}
+      />
       {node.tags.length > 0 && (
         <div className="tag-row">
           {node.tags.map((tag) => (

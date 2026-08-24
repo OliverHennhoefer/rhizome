@@ -17,6 +17,7 @@ import {
 import { labelLodForRatio, selectPriorityLabels, shouldForceNeighborLabels } from "./graph-labels";
 import {
   createDisplayGraph,
+  type GraphForceSettings,
   GraphMotionController,
   GraphPositionStore,
   isMotionEligible,
@@ -33,6 +34,8 @@ export interface GraphViewportSnapshot {
   motionEnabled: boolean;
   compact: boolean;
   reducedMotion: boolean;
+  forceSettings: GraphForceSettings;
+  searchMatches?: ReadonlySet<string>;
   onSelect: (id: string) => void;
 }
 
@@ -73,6 +76,7 @@ export class GraphViewportSession {
   private hovered?: string;
   private hoverNeighbors = new Set<string>();
   private selected?: string;
+  private searchMatches?: ReadonlySet<string>;
   private selectedNeighbors = new Set<string>();
   private priorityNeighborLabels = new Set<string>();
   private suppressClickUntil = 0;
@@ -163,7 +167,8 @@ export class GraphViewportSession {
       node === this.selected ||
       node === this.hovered ||
       this.positions.isPinned(node) ||
-      this.priorityNeighborLabels.has(node)
+      this.priorityNeighborLabels.has(node) ||
+      Boolean(this.searchMatches?.has(node))
     );
   }
 
@@ -191,15 +196,21 @@ export class GraphViewportSession {
     const isHovered = node === this.hovered;
     const isHoverNeighbor = this.hoverNeighbors.has(node);
     const isPinned = this.positions.isPinned(node);
+    const isSearchMatch = this.searchMatches?.has(node) ?? false;
+    const searchRelated = !this.searchMatches || isSearchMatch;
     const hoverRelated = !this.hovered || isHovered || isHoverNeighbor;
     const color = isSelected ? "#ffffff" : nodeTone(data.kind, Number(data.community ?? 0));
     const size = this.nodeSize(node, data);
     return {
       ...data,
-      label: String(data.title ?? node),
-      color: hoverRelated ? color : nodeColorWithAlpha(color, "2e"),
-      size,
-      zIndex: isSelected || isHovered ? 4 : isPinned ? 3 : isSelectedNeighbor ? 2 : 1,
+      label: !this.searchMatches || isSearchMatch || isSelected ? String(data.title ?? node) : "",
+      color:
+        hoverRelated && searchRelated
+          ? color
+          : nodeColorWithAlpha(color, this.searchMatches ? "22" : "2e"),
+      size: isSearchMatch ? size + 1.2 : size,
+      zIndex:
+        isSelected || isHovered ? 4 : isPinned || isSearchMatch ? 3 : isSelectedNeighbor ? 2 : 1,
       forceLabel: this.isPriorityLabel(node),
       highlighted: isPinned,
     };
@@ -210,12 +221,16 @@ export class GraphViewportSession {
       this.selected && (data.source === this.selected || data.target === this.selected);
     const hoverActive =
       this.hovered && (data.source === this.hovered || data.target === this.hovered);
+    const searchActive =
+      this.searchMatches?.has(data.source) && this.searchMatches.has(data.target);
     const color = data.relationColor;
-    const active = this.hovered ? hoverActive : selectedActive;
+    const active = this.hovered ? hoverActive : this.searchMatches ? searchActive : selectedActive;
     return {
       ...data,
-      color: active ? color : blendGraphTone(color, this.hovered ? 0.1 : 0.24),
-      size: active ? 1.7 : this.hovered ? 0.3 : 0.42,
+      color: active
+        ? color
+        : blendGraphTone(color, this.hovered || this.searchMatches ? 0.1 : 0.24),
+      size: active ? 1.7 : this.hovered || this.searchMatches ? 0.3 : 0.42,
       zIndex: active ? 2 : 1,
     };
   }
@@ -404,6 +419,7 @@ export class GraphViewportSession {
     const motion = new GraphMotionController({
       graph: this.displayGraph,
       positions: this.positions,
+      forceSettings: snapshot.forceSettings,
       onStatus: (status) => this.emitStatus(status),
       onPinnedChange: () => {
         this.emitPinnedCount();
@@ -456,6 +472,7 @@ export class GraphViewportSession {
     const projectionChanged = !previous || previous.projection !== next.projection;
     const selectionChanged = previous?.selected !== next.selected;
     const focusChanged = previous?.focus !== next.focus;
+    const searchChanged = previous?.searchMatches !== next.searchMatches;
     const previousEligible = previous
       ? isMotionEligible(previous.projection, previous.compact)
       : undefined;
@@ -464,9 +481,16 @@ export class GraphViewportSession {
       !previous ||
       previous.motionEnabled !== next.motionEnabled ||
       previousEligible !== nextEligible;
+    const forceSettingsChanged = previous?.forceSettings !== next.forceSettings;
 
     this.snapshot = next;
     this.selected = next.selected;
+    this.searchMatches = next.searchMatches;
+    if (next.searchMatches) {
+      this.container.setAttribute("data-search-match-count", String(next.searchMatches.size));
+    } else {
+      this.container.removeAttribute("data-search-match-count");
+    }
 
     if (projectionChanged) this.replaceDisplayGraph(next.projection);
     else if (selectionChanged) {
@@ -485,9 +509,13 @@ export class GraphViewportSession {
     if (projectionChanged || motionPolicyChanged) {
       if (!projectionChanged) this.stopMotion();
       this.startMotion();
+    } else if (forceSettingsChanged) {
+      this.motion?.updateForces(next.forceSettings);
     }
 
-    if (!projectionChanged && (selectionChanged || focusChanged)) this.renderer.refresh();
+    if (!projectionChanged && (selectionChanged || focusChanged || searchChanged)) {
+      this.renderer.refresh();
+    }
     if (previous && selectionChanged && next.selected && this.displayGraph.hasNode(next.selected)) {
       this.centerSelection(next.selected);
     }
@@ -520,9 +548,11 @@ export class GraphViewportSession {
     this.cameraFrame = undefined;
     this.hovered = undefined;
     this.hoverNeighbors.clear();
+    this.searchMatches = undefined;
     this.priorityNeighborLabels.clear();
     this.container.removeAttribute("data-hovered-node");
     this.container.removeAttribute("data-hovered-neighbor-count");
+    this.container.removeAttribute("data-search-match-count");
     this.container.removeAttribute("data-camera-ratio");
     this.renderer.kill();
   }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { GraphManifest } from "../shared/contracts";
+import type { GraphManifest, GraphNode } from "../shared/contracts";
 import { Graph2D } from "./Graph2D";
 import { createGraph, projectGraph } from "./graph";
 import { Reader } from "./Reader";
@@ -8,6 +8,12 @@ import { toggleDirectionalFocus } from "./ui-state";
 import { readUrlState, type UrlState, writeUrlState } from "./url-state";
 
 type FilterKey = "types" | "tags" | "relations";
+
+function matchesSearch(node: GraphNode, query: string): boolean {
+  return [node.title, node.path, ...node.aliases, ...node.tags]
+    .filter(Boolean)
+    .some((value) => value?.toLocaleLowerCase().includes(query));
+}
 
 function hasWebGl(): boolean {
   try {
@@ -72,22 +78,24 @@ export function App() {
     [state.relations, state.tags, state.types],
   );
 
-  const results = useMemo(() => {
+  const searchMatches = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
-    if (!manifest || !query) return [];
-    return manifest.nodes
-      .filter((node) =>
-        [node.title, node.path, ...node.aliases, ...node.tags]
-          .filter(Boolean)
-          .some((value) => value?.toLocaleLowerCase().includes(query)),
-      )
-      .slice(0, 12);
+    if (!manifest || !query) return undefined;
+    return new Set(manifest.nodes.filter((node) => matchesSearch(node, query)).map(({ id }) => id));
   }, [manifest, search]);
+  const results = useMemo(
+    () =>
+      !manifest || !searchMatches
+        ? []
+        : manifest.nodes.filter(({ id }) => searchMatches.has(id)).slice(0, 12),
+    [manifest, searchMatches],
+  );
 
   const update = (change: Partial<UrlState>) => setState((current) => ({ ...current, ...change }));
   const select = (note: string) => {
     if (!note) return;
     update({ note });
+    setSearch("");
     setReaderOpen(true);
   };
   const toggleFilter = (key: FilterKey, value: string) => {
@@ -98,8 +106,10 @@ export function App() {
       return { ...current, [key]: next };
     });
   };
-  const clearFilters = () =>
+  const clearFilters = () => {
+    setSearch("");
     update({ types: new Set<string>(), tags: new Set<string>(), relations: new Set<string>() });
+  };
   const toggleFocus = (direction: "in" | "out") =>
     setState((current) => ({
       ...current,
@@ -132,46 +142,25 @@ export function App() {
 
   return (
     <main className="app-shell">
-      <header className="app-header">
-        <a className="brand" href={import.meta.env.BASE_URL}>
-          <span aria-hidden="true" className="brand-mark">
-            R
-          </span>
-          <strong>{manifest.config.site.title}</strong>
-        </a>
-        <div className="search-wrap">
-          <input
-            aria-label="Search notes"
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search notes, aliases, paths, and tags"
-            value={search}
-          />
-          {results.length > 0 && (
-            <div className="search-results">
-              {results.map((node) => (
-                <button
-                  key={node.id}
-                  onClick={() => {
-                    select(node.id);
-                    setSearch("");
-                  }}
-                  type="button"
-                >
-                  <span>{node.title}</span>
-                  <small>{node.path ?? node.kind}</small>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      </header>
-
       <div className="workspace">
         <section className="stage">
           {!webgl ? (
             <div className="webgl-fallback">
               <h2>Graph rendering unavailable</h2>
               <p>Search and relationship navigation remain available in this browser.</p>
+              <div className="fallback-search">
+                <input
+                  aria-label="Search notes"
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search notes"
+                  value={search}
+                />
+                {results.map((node) => (
+                  <button key={node.id} onClick={() => select(node.id)} type="button">
+                    {node.title}
+                  </button>
+                ))}
+              </div>
               {state.note && (
                 <button onClick={() => setReaderOpen((current) => !current)} type="button">
                   {readerOpen ? "Hide reader" : "Show reader"}
@@ -187,16 +176,19 @@ export function App() {
               graph={graph}
               manifest={manifest}
               onClearFilters={clearFilters}
-              onDepthChange={(depth) => update({ depth })}
+              onClearFocus={() => update({ focus: false, direction: "both" })}
               onOverview={showOverview}
               onSelect={select}
               onToggleFilter={toggleFilter}
-              onToggleFocus={toggleFocus}
               onToggleReader={() => state.note && setReaderOpen((current) => !current)}
               overviewRevision={overviewRevision}
               projection={projection}
               readerOpen={readerOpen}
+              search={search}
+              searchMatches={searchMatches}
+              searchResults={results}
               selected={state.note}
+              onSearchChange={setSearch}
             />
           )}
         </section>
@@ -208,9 +200,14 @@ export function App() {
             open={readerOpen}
           >
             <Reader
+              depth={state.depth}
+              direction={state.direction}
+              focus={state.focus}
               manifest={manifest}
               onClose={closeReaderFromContent}
+              onDepthChange={(depth) => update({ depth })}
               onSelect={select}
+              onToggleFocus={toggleFocus}
               selected={state.note}
             />
           </ReaderPane>

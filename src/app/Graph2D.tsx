@@ -1,8 +1,12 @@
-import { useEffect, useRef, useState } from "react";
-import type { GraphManifest } from "../shared/contracts";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { GraphManifest, GraphNode } from "../shared/contracts";
 import { GraphControls } from "./GraphControls";
 import type { GraphProjection, RhizomeGraph } from "./graph";
-import type { LayoutStatus } from "./graph-layout";
+import {
+  DEFAULT_GRAPH_FORCE_SETTINGS,
+  type GraphForceSettings,
+  type LayoutStatus,
+} from "./graph-layout";
 import { GraphViewportSession } from "./graph-viewport";
 
 type FilterKey = "types" | "tags" | "relations";
@@ -17,13 +21,16 @@ interface Props {
   depth: number;
   filters: Record<FilterKey, Set<string>>;
   readerOpen: boolean;
+  search: string;
+  searchMatches?: ReadonlySet<string>;
+  searchResults: GraphNode[];
   overviewRevision: number;
   onSelect: (id: string) => void;
   onOverview: () => void;
-  onToggleFocus: (direction: "in" | "out") => void;
-  onDepthChange: (depth: number) => void;
+  onClearFocus: () => void;
   onToggleFilter: (key: FilterKey, value: string) => void;
   onClearFilters: () => void;
+  onSearchChange: (value: string) => void;
   onToggleReader: () => void;
 }
 
@@ -49,13 +56,16 @@ export function Graph2D({
   depth,
   filters,
   readerOpen,
+  search,
+  searchMatches,
+  searchResults,
   overviewRevision,
   onSelect,
   onOverview,
-  onToggleFocus,
-  onDepthChange,
+  onClearFocus,
   onToggleFilter,
   onClearFilters,
+  onSearchChange,
   onToggleReader,
 }: Props) {
   const container = useRef<HTMLDivElement>(null);
@@ -65,7 +75,18 @@ export function Graph2D({
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const [status, setStatus] = useState<LayoutStatus>("paused");
   const [pinnedCount, setPinnedCount] = useState(0);
+  const [forceSettings, setForceSettings] = useState<GraphForceSettings>(() => ({
+    ...DEFAULT_GRAPH_FORCE_SETTINGS,
+  }));
   const motionEnabled = !reducedMotion;
+  const handleForceChange = useCallback((key: keyof GraphForceSettings, value: number) => {
+    setForceSettings((current) => ({ ...current, [key]: value }));
+  }, []);
+  const handleRestoreForceDefaults = useCallback(
+    () => setForceSettings({ ...DEFAULT_GRAPH_FORCE_SETTINGS }),
+    [],
+  );
+  const handleResetLayout = useCallback(() => session.current?.resetLayout(), []);
 
   useEffect(() => {
     if (!container.current) return;
@@ -94,6 +115,8 @@ export function Graph2D({
       motionEnabled,
       compact,
       reducedMotion,
+      forceSettings,
+      searchMatches,
       onSelect,
     });
     if (resetOverview) {
@@ -102,12 +125,14 @@ export function Graph2D({
     }
   }, [
     compact,
+    forceSettings,
     focus,
     motionEnabled,
     onSelect,
     overviewRevision,
     projection,
     reducedMotion,
+    searchMatches,
     selected,
   ]);
 
@@ -121,22 +146,29 @@ export function Graph2D({
         ref={container}
       />
       <GraphControls
-        compact={compact}
         depth={depth}
         direction={direction}
         filters={filters}
+        forceSettings={forceSettings}
         focus={focus}
         manifest={manifest}
         onClearFilters={onClearFilters}
-        onDepthChange={onDepthChange}
+        onClearFocus={onClearFocus}
+        onForceChange={handleForceChange}
         onOverview={onOverview}
+        onResetLayout={handleResetLayout}
+        onRestoreForceDefaults={handleRestoreForceDefaults}
         onToggleFilter={onToggleFilter}
-        onToggleFocus={onToggleFocus}
         onToggleReader={onToggleReader}
         projection={projection}
+        pinnedCount={pinnedCount}
         readerOpen={readerOpen}
+        search={search}
+        searchResults={searchResults}
         selected={selected}
-        status={status}
+        onSearchChange={onSearchChange}
+        onSelect={onSelect}
+        motionAvailable={motionEnabled}
       />
     </>
   );

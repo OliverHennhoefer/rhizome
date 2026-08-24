@@ -115,6 +115,86 @@
   background: var(--surface-hover);
 }
 
+.reader-focus {
+  display: grid;
+  gap: 10px;
+  padding: 16px 28px;
+  border-bottom: 1px solid var(--line);
+}
+
+.reader-focus > h3 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.reader-focus-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.reader-focus-options button {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  min-height: 48px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--secondary);
+  background: var(--surface);
+  font-size: 10px;
+  line-height: 1.25;
+  text-align: left;
+  cursor: pointer;
+}
+
+.reader-focus-options button:hover {
+  border-color: var(--line-strong);
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.reader-focus-options button[aria-pressed="true"] {
+  color: var(--background);
+  background: var(--text);
+}
+
+.reader-focus-options small {
+  color: var(--muted);
+  font-size: 8px;
+}
+
+.reader-focus-options button[aria-pressed="true"] small {
+  color: #55575c;
+}
+
+.reader-focus-depth {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.reader-focus-depth > span {
+  display: flex;
+  justify-content: space-between;
+}
+
+.reader-focus-depth strong {
+  color: var(--text);
+  font-weight: 550;
+}
+
+.reader-focus-depth input {
+  width: 100%;
+  accent-color: var(--text);
+}
+
 .tag-row {
   display: flex;
   flex-wrap: wrap;
@@ -476,6 +556,7 @@
   }
 
   .tag-row,
+  .reader-focus,
   .note-content,
   .relationships {
     padding-right: 20px;

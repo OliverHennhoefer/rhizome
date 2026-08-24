@@ -1,160 +1,7 @@
 .app-shell {
-  display: grid;
-  grid-template-rows: 56px minmax(0, 1fr);
   width: 100%;
   height: 100%;
   background: var(--background);
-}
-
-.app-header {
-  z-index: 20;
-  display: grid;
-  grid-template-columns: minmax(160px, 1fr) minmax(280px, 520px);
-  gap: 24px;
-  align-items: center;
-  padding: 8px 14px 8px 16px;
-  border-bottom: 1px solid var(--line);
-  background: rgba(29, 31, 34, 0.88);
-  backdrop-filter: saturate(110%) blur(20px);
-}
-
-.brand {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  min-width: 0;
-  color: var(--text);
-  text-decoration: none;
-}
-
-.brand-mark {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--line-strong);
-  border-radius: 9px;
-  color: var(--secondary);
-  background: var(--surface);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.brand strong {
-  overflow: hidden;
-  font-size: 14px;
-  font-weight: 620;
-  letter-spacing: -0.018em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.search-wrap {
-  position: relative;
-  width: 100%;
-}
-
-.search-wrap::before {
-  position: absolute;
-  top: 50%;
-  left: 13px;
-  z-index: 1;
-  width: 10px;
-  height: 10px;
-  border: 1.25px solid var(--muted);
-  border-radius: 50%;
-  content: "";
-  pointer-events: none;
-  transform: translateY(-60%);
-}
-
-.search-wrap::after {
-  position: absolute;
-  top: 23px;
-  left: 22px;
-  z-index: 1;
-  width: 5px;
-  height: 1px;
-  background: var(--muted);
-  content: "";
-  pointer-events: none;
-  transform: rotate(45deg);
-}
-
-.search-wrap input {
-  width: 100%;
-  height: 38px;
-  padding: 0 13px 0 34px;
-  border: 1px solid transparent;
-  border-radius: 11px;
-  outline: none;
-  color: var(--text);
-  background: var(--surface);
-  font-size: 12px;
-  transition:
-    border-color 150ms ease,
-    background 150ms ease,
-    box-shadow 150ms ease;
-}
-
-.search-wrap input::placeholder {
-  color: var(--subtle);
-}
-
-.search-wrap input:hover {
-  background: #292b2f;
-}
-
-.search-wrap input:focus {
-  border-color: var(--line-strong);
-  background: #202225;
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.04);
-}
-
-.search-results {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  left: 0;
-  z-index: 30;
-  overflow: hidden;
-  padding: 5px;
-  border: 1px solid var(--line-strong);
-  border-radius: 13px;
-  background: rgba(36, 38, 42, 0.96);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(20px);
-}
-
-.search-results button {
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  width: 100%;
-  padding: 10px 11px;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  font-size: 11px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.search-results button:hover {
-  background: var(--surface-hover);
-}
-
-.search-results button span,
-.search-results small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.search-results small {
-  max-width: 48%;
-  color: var(--muted);
 }
 
 .workspace {
@@ -162,6 +9,8 @@
   display: flex;
   min-width: 0;
   min-height: 0;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
 }
 
@@ -190,7 +39,6 @@
 .graph-summary,
 .graph-toolbar,
 .control-popover,
-.graph-status,
 .focus-status {
   border: 1px solid var(--line);
   background: rgba(29, 31, 34, 0.78);
@@ -200,8 +48,8 @@
 
 .graph-summary {
   position: absolute;
-  top: 14px;
-  left: 14px;
+  right: 14px;
+  bottom: 14px;
   z-index: 4;
   display: flex;
   gap: 10px;
@@ -260,6 +108,10 @@
   top: 14px;
   right: 14px;
   z-index: 10;
+}
+
+.graph-controls.has-open-popover {
+  z-index: 20;
 }
 
 .graph-toolbar {
@@ -373,12 +225,98 @@
   background: var(--surface-hover);
 }
 
-.focus-options {
-  display: grid;
-  gap: 6px;
+.filter-search {
+  position: relative;
+  padding: 0 8px 10px;
 }
 
-.focus-options button,
+.filter-search input,
+.fallback-search input {
+  width: 100%;
+  height: 36px;
+  padding: 0 34px 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  outline: none;
+  color: var(--text);
+  background: var(--panel);
+  font-size: 11px;
+}
+
+.filter-search input:focus,
+.fallback-search input:focus {
+  border-color: var(--line-strong);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.04);
+}
+
+.filter-search > button {
+  position: absolute;
+  top: 4px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0 0 2px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.filter-search > button:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.filter-search-results {
+  max-height: 220px;
+  overflow: auto;
+  padding: 0 8px 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.filter-search-results > button {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  width: 100%;
+  padding: 9px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--secondary);
+  background: transparent;
+  font-size: 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.filter-search-results > button:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.filter-search-results span,
+.filter-search-results small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-search-results small {
+  max-width: 45%;
+  color: var(--muted);
+}
+
+.filter-search-results > p {
+  margin: 0;
+  padding: 10px;
+  color: var(--muted);
+  font-size: 10px;
+  text-align: center;
+}
+
 .popover-action {
   display: flex;
   align-items: center;
@@ -395,49 +333,60 @@
   cursor: pointer;
 }
 
-.focus-options button:hover,
 .popover-action:hover:not(:disabled) {
   border-color: var(--line-strong);
   color: var(--text);
   background: var(--surface-hover);
 }
 
-.focus-options button[aria-pressed="true"] {
-  color: var(--background);
-  background: var(--text);
+.force-controls {
+  display: grid;
+  gap: 14px;
+  padding: 12px 10px 14px;
+  border-top: 1px solid var(--line);
 }
 
-.focus-options small {
+.force-control {
+  display: grid;
+  gap: 8px;
+  color: var(--secondary);
+  font-size: 10px;
+}
+
+.force-control > span,
+.layout-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.force-control output,
+.layout-meta {
   color: var(--muted);
   font-size: 9px;
 }
 
-.focus-options button[aria-pressed="true"] small {
-  color: #55575c;
-}
-
-.depth-control {
-  display: grid;
-  gap: 7px;
-  margin-top: 12px;
-  padding: 10px 2px 2px;
-  color: var(--muted);
-  font-size: 10px;
-}
-
-.depth-control > span {
-  display: flex;
-  justify-content: space-between;
-}
-
-.depth-control strong {
-  color: var(--text);
-  font-weight: 550;
-}
-
-.depth-control input {
+.force-control input {
   width: 100%;
   accent-color: var(--text);
+}
+
+.layout-meta {
+  justify-content: flex-end;
+  padding: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.layout-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.layout-actions .popover-action {
+  justify-content: center;
+  margin-top: 0;
+  text-align: center;
 }
 
 .filter-group {
@@ -527,7 +476,6 @@
   cursor: not-allowed;
 }
 
-.graph-status,
 .focus-status {
   position: absolute;
   bottom: 14px;
@@ -537,37 +485,28 @@
   border-radius: 9px;
   color: var(--muted);
   font-size: 9px;
-  pointer-events: none;
-}
-
-.graph-status {
-  left: 14px;
   display: flex;
   gap: 7px;
   align-items: center;
 }
 
-.graph-status i {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--subtle);
-}
-
-.graph-status.status-running i,
-.graph-status.status-loading i {
-  background: var(--text);
-  animation: motion-pulse 1.25s ease-out infinite;
-}
-
 .focus-status {
-  right: 14px;
+  left: 14px;
 }
 
-@keyframes motion-pulse {
-  70% {
-    box-shadow: 0 0 0 5px rgba(255, 255, 255, 0);
-  }
+.focus-status button {
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 5px;
+  color: var(--secondary);
+  background: var(--surface);
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.focus-status button:hover {
+  color: var(--text);
+  background: var(--surface-hover);
 }
 
 .webgl-fallback {
@@ -598,6 +537,18 @@
   cursor: pointer;
 }
 
+.fallback-search {
+  display: grid;
+  gap: 5px;
+  width: min(360px, 80vw);
+  margin: 12px auto 0;
+}
+
+.fallback-search button {
+  margin: 0;
+  text-align: left;
+}
+
 @media (max-width: 980px) {
   .control-label {
     display: none;
@@ -609,29 +560,10 @@
 }
 
 @media (max-width: 760px) {
-  .app-shell {
-    grid-template-rows: 96px minmax(0, 1fr);
-  }
-
-  .app-header {
-    grid-template: 32px 40px / 1fr;
-    gap: 6px;
-    padding: 7px 10px 10px;
-  }
-
-  .brand-mark {
-    width: 26px;
-    height: 26px;
-  }
-
-  .search-wrap input {
-    height: 38px;
-  }
-
   .graph-summary {
-    top: 10px;
-    left: 10px;
-    max-width: calc(100% - 224px);
+    right: 10px;
+    bottom: 10px;
+    max-width: calc(100% - 20px);
     overflow: hidden;
   }
 
@@ -664,26 +596,13 @@
     border-radius: 16px;
   }
 
-  .graph-status {
-    bottom: 10px;
-    left: 10px;
-  }
-
-  .graph-status span:nth-of-type(n + 2) {
-    display: none;
-  }
-
   .focus-status {
-    right: 10px;
+    left: 10px;
     bottom: 10px;
   }
 }
 
 @media (max-width: 420px) {
-  .graph-summary {
-    display: none;
-  }
-
   .graph-toolbar button {
     min-width: 30px;
     padding-inline: 6px;

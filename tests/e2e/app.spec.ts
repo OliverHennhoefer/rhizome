@@ -1,4 +1,10 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
+
+async function searchNotes(page: Page, query: string): Promise<void> {
+  const filters = page.getByRole("button", { name: "Filters" });
+  if ((await filters.getAttribute("aria-expanded")) !== "true") await filters.click();
+  await page.getByLabel("Search notes").fill(query);
+}
 
 test("selects notes, restores query state, and loads details lazily", async ({ page }) => {
   let detailsRequests = 0;
@@ -13,10 +19,16 @@ test("selects notes, restores query state, and loads details lazily", async ({ p
   ).toBeVisible();
   await expect(page).toHaveURL(/focus=1/);
   await expect(page).toHaveURL(/direction=in/);
+  const readerFocus = page.getByTestId("reader").getByRole("region", { name: "Graph focus" });
+  await expect(readerFocus).toBeVisible();
+  await expect(readerFocus.getByRole("button", { name: "What depends on this?" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
   expect(detailsRequests).toBeLessThanOrEqual(2);
-  await page.getByLabel("Search notes").fill("scaled dot");
+  await searchNotes(page, "scaled dot");
   await page
-    .locator(".search-results")
+    .getByRole("region", { name: "Search results" })
     .getByRole("button", { name: /Scaled dot-product attention/ })
     .click();
   await expect(
@@ -47,6 +59,9 @@ test("renders the analytical graph without a renderer switch", async ({ page }) 
   await expect(graph).toHaveAttribute("data-camera-ratio", "1.0800");
   await expect(page.getByTestId("reader")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Show reader" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Focus" })).toHaveCount(0);
+  await expect(page.getByText(/Graph (settled|relaxing)/)).toHaveCount(0);
+  await expect(page.getByText(/Drag nodes/)).toHaveCount(0);
   await expect(page.getByRole("group", { name: "Graph view" })).toHaveCount(0);
 });
 
@@ -57,7 +72,8 @@ test("clears hover state when a focused projection removes the hovered node", as
   await page.goto("");
   const graph = page.getByTestId("graph-2d");
   await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
-  await page.getByLabel("Search notes").fill("subword tokenization");
+  await searchNotes(page, "subword tokenization");
+  await expect(graph).toHaveAttribute("data-search-match-count", "1");
   await page.getByRole("button", { name: /Subword tokenization/ }).click();
   await page.waitForTimeout(350);
 
@@ -68,15 +84,13 @@ test("clears hover state when a focused projection removes the hovered node", as
   await expect(graph).toHaveAttribute("data-hovered-node", "Language/Subword tokenization");
 
   await page
-    .getByRole("button", { name: "Focus" })
-    .evaluate((element) => (element as unknown as { click(): void }).click());
-  await page
+    .getByTestId("reader")
     .getByRole("button", { name: "What depends on this?" })
     .evaluate((element) => (element as unknown as { click(): void }).click());
   await expect(graph).toHaveAttribute("data-hovered-node", "Language/Subword tokenization");
   await expect(graph).toHaveAttribute("data-hovered-neighbor-count", "1");
 
-  await page.getByLabel("Search notes").fill("adamw");
+  await searchNotes(page, "adamw");
   await page
     .getByRole("button", { name: /AdamW/ })
     .evaluate((element) => (element as unknown as { click(): void }).click());
@@ -90,7 +104,7 @@ test("recomputes retained hover neighbors after relation filtering", async ({ pa
   await page.goto("");
   const graph = page.getByTestId("graph-2d");
   await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
-  await page.getByLabel("Search notes").fill("subword tokenization");
+  await searchNotes(page, "subword tokenization");
   await page.getByRole("button", { name: /Subword tokenization/ }).click();
   await page.waitForTimeout(350);
 
@@ -121,9 +135,10 @@ test("selection-only navigation does not reheat the settled graph", async ({ pag
   const graph = page.getByTestId("graph-2d");
   await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
 
-  await page.getByLabel("Search notes").fill("matrix multiplication");
+  await searchNotes(page, "matrix multiplication");
+  await expect(graph).toHaveAttribute("data-search-match-count", "1");
   await page
-    .locator(".search-results")
+    .getByRole("region", { name: "Search results" })
     .getByRole("button", { name: /Matrix multiplication/ })
     .click();
   const statuses: Array<string | null> = [];
@@ -134,15 +149,41 @@ test("selection-only navigation does not reheat the settled graph", async ({ pag
   expect(statuses).not.toContain("loading");
   expect(statuses).not.toContain("running");
   await expect(graph).toHaveAttribute("data-layout-status", "settled");
+
+  const bounds = await graph.boundingBox();
+  expect(bounds).not.toBeNull();
+  if (!bounds) return;
+  const x = bounds.x + bounds.width / 2;
+  const y = bounds.y + bounds.height / 2;
+  await page.mouse.move(x, y);
+  await expect(graph).toHaveAttribute(
+    "data-hovered-node",
+    "Foundations/Linear algebra/Matrix multiplication",
+  );
+  await page.mouse.down();
+  await page.mouse.move(x + 2, y + 2);
+  await page.mouse.up();
+  await page.waitForTimeout(300);
+  await expect(graph).toHaveAttribute("data-layout-status", "settled");
+  await expect(graph).toHaveAttribute("data-pinned-count", "0");
 });
 
-test("relaxes gradually without retaining a perpetual simulation", async ({ page }, testInfo) => {
+test("relaxes gradually and responds to layout force controls", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "root", "root desktop project only");
+  test.setTimeout(60_000);
   await page.goto("");
   const graph = page.getByTestId("graph-2d");
   await expect(graph).toHaveAttribute("data-layout-status", "running", { timeout: 5_000 });
   await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
-  await expect(page.getByRole("button", { name: "Layout" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Layout" }).click();
+  await expect(page.getByRole("dialog", { name: "Graph layout" })).toBeVisible();
+  const repel = page.getByRole("slider", { name: "Repel force" });
+  await expect(repel).toHaveValue("40");
+  await repel.fill("55");
+  await expect(graph).toHaveAttribute("data-layout-status", "running");
+  await page.getByRole("button", { name: "Restore force defaults" }).click();
+  await expect(repel).toHaveValue("40");
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
 });
 
 test("keeps settled node positions stable while zooming and panning", async ({
@@ -191,7 +232,7 @@ test("shift-drag pins, overview resets, and normal drag releases a node", async 
   await page.goto("");
   const graph = page.getByTestId("graph-2d");
   await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
-  await page.getByLabel("Search notes").fill("subword tokenization");
+  await searchNotes(page, "subword tokenization");
   await page.getByRole("button", { name: /Subword tokenization/ }).click();
   await page.waitForTimeout(350);
 
@@ -212,12 +253,18 @@ test("shift-drag pins, overview resets, and normal drag releases a node", async 
   await expect(graph).toHaveAttribute("data-pinned-count", "1");
   await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
 
-  await page.getByLabel("Search notes").fill("adamw");
+  await searchNotes(page, "adamw");
   await page.getByRole("button", { name: /AdamW/ }).click();
-  await page.getByLabel("Search notes").fill("subword tokenization");
+  await searchNotes(page, "subword tokenization");
   await page.getByRole("button", { name: /Subword tokenization/ }).click();
   await page.waitForTimeout(350);
   await page.mouse.move(x, y);
+  await expect(graph).toHaveAttribute("data-hovered-node", "Language/Subword tokenization");
+  await page.mouse.down();
+  await page.mouse.up();
+  await expect(graph).toHaveAttribute("data-pinned-count", "1");
+  await expect(graph).toHaveAttribute("data-layout-status", "settled");
+
   await page.mouse.down();
   await page.mouse.move(x + 35, y + 15, { steps: 4 });
   await page.mouse.up();
@@ -225,7 +272,7 @@ test("shift-drag pins, overview resets, and normal drag releases a node", async 
 
   await page.goto("");
   await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
-  await page.getByLabel("Search notes").fill("subword tokenization");
+  await searchNotes(page, "subword tokenization");
   await page.getByRole("button", { name: /Subword tokenization/ }).click();
   await page.waitForTimeout(350);
   const resetBounds = await graph.boundingBox();
@@ -248,7 +295,7 @@ test("shift-drag pins, overview resets, and normal drag releases a node", async 
   await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
 });
 
-test("keeps oversized projections static with an explanation", async ({ page }, testInfo) => {
+test("keeps oversized projections static without status chrome", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "root", "root desktop project only");
   const nodes = Array.from({ length: 601 }, (_, index) => ({
     id: `note-${index}`,
@@ -281,14 +328,15 @@ test("keeps oversized projections static with an explanation", async ({ page }, 
   await page.goto("");
   const graph = page.getByTestId("graph-2d");
   await expect(graph).toHaveAttribute("data-layout-status", "static");
-  await expect(page.getByText("Focus or filter to enable motion")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Layout" })).toHaveCount(0);
+  await expect(page.getByText("Focus or filter to enable motion")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Layout" })).toBeVisible();
 });
 
 test("toggles directional focus and returns to a filtered fitted overview", async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "root", "root desktop project only");
+  test.setTimeout(60_000);
   await page.goto("?note=Foundations%2FArithmetic%2FMultiplication");
   const graph = page.getByTestId("graph-2d");
   await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
@@ -299,14 +347,21 @@ test("toggles directional focus and returns to a filtered fitted overview", asyn
   await relations.getByRole("checkbox", { name: "link", exact: true }).click();
   await expect(page).toHaveURL(/relation=link/);
 
-  await page.getByRole("button", { name: "Focus" }).click();
-  const inbound = page.getByRole("button", { name: "What depends on this?" });
+  const readerFocus = page.getByTestId("reader").getByRole("region", { name: "Graph focus" });
+  const inbound = readerFocus.getByRole("button", { name: "What depends on this?" });
   await inbound.click();
   await expect(page).toHaveURL(/focus=1/);
   await expect(page).toHaveURL(/direction=in/);
+  await expect(page.getByRole("region", { name: "Active graph focus" })).toBeVisible();
   await inbound.click();
   await expect(page).not.toHaveURL(/focus=1/);
   await expect(page).not.toHaveURL(/direction=in/);
+  await inbound.click();
+  await page.getByRole("button", { name: "Close reader" }).click();
+  await page.getByRole("button", { name: "Exit focus" }).click();
+  await expect(page).not.toHaveURL(/focus=1/);
+  await expect(page.getByRole("region", { name: "Active graph focus" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Show reader" }).click();
   await inbound.click();
 
   const bounds = await graph.boundingBox();
@@ -451,6 +506,7 @@ test("retains DOM navigation when WebGL is unavailable", async ({ page }, testIn
 test("mobile retains search and reader navigation", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-reader", "mobile project only");
   await page.goto("?note=Learning%2FAdamW");
+  await page.getByRole("button", { name: "Filters" }).click();
   await expect(page.getByLabel("Search notes")).toBeVisible();
   await expect(page.getByTestId("reader").getByRole("heading", { name: "AdamW" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Relationships" })).toBeVisible();
