@@ -130,12 +130,39 @@ test("runs bounded motion, pauses, resumes, and resets", async ({ page }, testIn
   await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 5_000 });
 });
 
+test("nudges live while zooming and ignores pure camera panning", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "root", "root desktop project only");
+  await page.goto("");
+  const graph = page.getByTestId("graph-2d");
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 5_000 });
+  await expect(graph).toHaveAttribute("data-nudge-status", "idle");
+
+  const bounds = await graph.boundingBox();
+  expect(bounds).not.toBeNull();
+  if (!bounds) return;
+  await page.mouse.move(bounds.x + bounds.width * 0.75, bounds.y + bounds.height * 0.75);
+  await page.mouse.wheel(0, 700);
+  await expect(graph).toHaveAttribute("data-nudge-status", "active");
+  await expect(graph).toHaveAttribute("data-layout-status", "running");
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 5_000 });
+  await expect(graph).toHaveAttribute("data-nudge-status", "idle");
+
+  await page.mouse.move(bounds.x + 24, bounds.y + 24);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + 64, bounds.y + 44, { steps: 4 });
+  await page.mouse.up();
+  await expect(graph).toHaveAttribute("data-nudge-status", "idle");
+  await expect(graph).toHaveAttribute("data-layout-status", "settled");
+});
+
 test("does not load D3 by default under reduced motion", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "root", "root desktop project only");
   await page.emulateMedia({ reducedMotion: "reduce" });
   const d3Requests: string[] = [];
+  const bboxRequests: string[] = [];
   page.on("request", (request) => {
     if (request.url().includes("d3-force")) d3Requests.push(request.url());
+    if (request.url().includes("d3-bboxCollide")) bboxRequests.push(request.url());
   });
 
   await page.goto("");
@@ -143,10 +170,14 @@ test("does not load D3 by default under reduced motion", async ({ page }, testIn
   await expect(graph).toHaveAttribute("data-layout-status", "paused");
   await page.waitForTimeout(250);
   expect(d3Requests).toEqual([]);
+  expect(bboxRequests).toEqual([]);
+  await expect(graph).toHaveAttribute("data-nudge-status", "disabled");
 
   await page.getByRole("button", { name: "Motion off" }).click();
   await expect.poll(() => d3Requests.length).toBeGreaterThan(0);
+  await expect.poll(() => bboxRequests.length).toBeGreaterThan(0);
   await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 5_000 });
+  await expect(graph).toHaveAttribute("data-nudge-status", "disabled");
 });
 
 test("shift-drag pins and normal drag releases a node", async ({ page }, testInfo) => {
@@ -220,6 +251,7 @@ test("keeps oversized projections static with an explanation", async ({ page }, 
   await page.goto("");
   const graph = page.getByTestId("graph-2d");
   await expect(graph).toHaveAttribute("data-layout-status", "static");
+  await expect(graph).toHaveAttribute("data-nudge-status", "disabled");
   await expect(page.getByText("Focus or filter to enable motion")).toBeVisible();
   await expect(page.getByRole("button", { name: "Motion on" })).toBeDisabled();
 });

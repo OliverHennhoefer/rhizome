@@ -23,6 +23,15 @@ import {
   nodeColorWithAlpha,
   nodeRadius,
 } from "./graph-layout";
+import {
+  collisionBoxForNode,
+  graphUnitsPerPixel,
+  LabelWidthCache,
+  labelLodForRatio,
+  NUDGE_SETTINGS,
+  type NudgeStatus,
+  selectPriorityLabels,
+} from "./graph-nudge";
 import { COMMUNITY_TONES, relationTone } from "./graph-theme";
 
 export interface GraphViewportSnapshot {
@@ -64,11 +73,22 @@ export class GraphViewportSession {
   private motion?: GraphMotionController;
   private motionFrame?: number;
   private cameraFrame?: number;
+  private nudgeFrame?: number;
+  private nudgeIdleTimer?: ReturnType<typeof setTimeout>;
+  private nudgePending = false;
+  private nudgeStatus: NudgeStatus = "disabled";
+  private suppressCameraNudge = false;
+  private cameraAnimationToken = 0;
+  private lastCameraRatio = 1;
+  private labelDensity = 0.08;
+  private labelThreshold = 8;
+  private readonly labelWidths: LabelWidthCache;
   private drag?: DragState;
   private hovered?: string;
   private hoverNeighbors = new Set<string>();
   private selected?: string;
   private selectedNeighbors = new Set<string>();
+  private priorityNeighborLabels = new Set<string>();
   private suppressClickUntil = 0;
   private destroyed = false;
 
@@ -78,6 +98,13 @@ export class GraphViewportSession {
     this.events = events;
     this.positions = new GraphPositionStore(sourceGraph);
     this.displayGraph = sourceGraph.nullCopy();
+    const measureContext = document.createElement("canvas").getContext("2d");
+    this.labelWidths = new LabelWidthCache((label) => {
+      if (!measureContext) return label.length * 7;
+      measureContext.font =
+        '500 12px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif';
+      return measureContext.measureText(label).width;
+    });
 
     const drawHover: NodeHoverDrawingFunction<GraphNode, RuntimeGraphEdge> = (context, data) => {
       const key = (data as typeof data & { key?: string }).key;
@@ -131,12 +158,38 @@ export class GraphViewportSession {
       labelRenderedSizeThreshold: 8,
       labelSize: 12,
       labelWeight: "500",
+      maxCameraRatio: 4,
       renderEdgeLabels: false,
       zIndex: true,
     });
     this.renderer.setSetting("nodeReducer", (node, data) => this.reduceNode(node, data));
     this.renderer.setSetting("edgeReducer", (_, data) => this.reduceEdge(data));
+    this.lastCameraRatio = this.renderer.getCamera().getState().ratio;
+    this.applyLabelLod(this.lastCameraRatio);
+    this.container.setAttribute("data-nudge-status", this.nudgeStatus);
+    this.renderer.getCamera().on("updated", this.handleCameraUpdate);
     this.bindInteractions();
+  }
+
+  private nodeSize(node: string, data: GraphNode): number {
+    const size = node === this.selected ? 13 : nodeRadius(data);
+    return node === this.hovered ? size + 2 : size;
+  }
+
+  private isPriorityLabel(node: string): boolean {
+    return (
+      node === this.selected ||
+      node === this.hovered ||
+      this.positions.isPinned(node) ||
+      this.priorityNeighborLabels.has(node)
+    );
+  }
+
+  private recomputePriorityNeighborLabels(): void {
+    this.priorityNeighborLabels = selectPriorityLabels(this.selectedNeighbors, (id) => {
+      if (!this.displayGraph.hasNode(id)) return 0;
+      return Number(this.displayGraph.getNodeAttribute(id, "degree")) || 0;
+    });
   }
 
   private reduceNode(node: string, data: GraphNode) {
@@ -152,14 +205,14 @@ export class GraphViewportSession {
       : isSelectedNeighbor
         ? "#c7c7cc"
         : COMMUNITY_TONES[Math.abs(community) % COMMUNITY_TONES.length];
-    const size = isSelected ? 13 : nodeRadius(data);
+    const size = this.nodeSize(node, data);
     return {
       ...data,
       label: String(data.title ?? node),
       color: hoverRelated ? color : nodeColorWithAlpha(color, "2e"),
-      size: isHovered ? size + 2 : size,
+      size,
       zIndex: isSelected || isHovered ? 4 : isPinned ? 3 : isSelectedNeighbor ? 2 : 1,
-      forceLabel: isSelected || isSelectedNeighbor || isHovered || isPinned,
+      forceLabel: this.isPriorityLabel(node),
       highlighted: isPinned,
     };
   }
@@ -178,6 +231,110 @@ export class GraphViewportSession {
       zIndex: active ? 2 : 1,
     };
   }
+
+  private setNudgeStatus(status: NudgeStatus): void {
+    this.nudgeStatus = status;
+    this.container.setAttribute("data-nudge-status", status);
+  }
+
+  private applyLabelLod(ratio: number): void {
+    const lod = labelLodForRatio(ratio);
+    if (Math.abs(lod.density - this.labelDensity) > 0.0001) {
+      this.labelDensity = lod.density;
+      this.renderer.setSetting("labelDensity", lod.density);
+    }
+    if (Math.abs(lod.renderedSizeThreshold - this.labelThreshold) > 0.01) {
+      this.labelThreshold = lod.renderedSizeThreshold;
+      this.renderer.setSetting("labelRenderedSizeThreshold", lod.renderedSizeThreshold);
+    }
+  }
+
+  private nudgeEligible(): boolean {
+    const snapshot = this.snapshot;
+    return Boolean(
+      snapshot?.motionEnabled &&
+        !snapshot.reducedMotion &&
+        isMotionEligible(snapshot.projection, snapshot.compact),
+    );
+  }
+
+  private collisionBoxes() {
+    const ratio = this.renderer.getCamera().getState().ratio;
+    const unitsPerPixel = graphUnitsPerPixel((point) => this.renderer.viewportToGraph(point));
+    const boxes = new Map<string, ReturnType<typeof collisionBoxForNode>>();
+    this.displayGraph.forEachNode((id, data) => {
+      const radiusPixels = this.renderer.scaleSize(this.nodeSize(id, data), ratio);
+      const labelWidthPixels = this.isPriorityLabel(id)
+        ? this.labelWidths.get(String(data.title ?? id))
+        : undefined;
+      boxes.set(id, collisionBoxForNode({ radiusPixels, unitsPerPixel, labelWidthPixels }));
+    });
+    return {
+      boxes,
+      maxDisplacement: NUDGE_SETTINGS.maxDisplacementPixels * unitsPerPixel,
+    };
+  }
+
+  private finishNudgeGesture(): void {
+    this.nudgeIdleTimer = undefined;
+    this.motion?.finishViewportNudge();
+  }
+
+  private runNudgeFrame(): void {
+    this.nudgeFrame = undefined;
+    if (!this.nudgeEligible()) {
+      this.nudgePending = false;
+      this.setNudgeStatus("disabled");
+      return;
+    }
+
+    const motion = this.motion;
+    if (!motion) return;
+    const request = this.collisionBoxes();
+    const started = motion.updateViewportNudge({ ...request, selected: this.selected });
+    if (!started) return;
+
+    this.nudgePending = false;
+    this.setNudgeStatus("active");
+    if (this.nudgeIdleTimer !== undefined) clearTimeout(this.nudgeIdleTimer);
+    this.nudgeIdleTimer = setTimeout(() => this.finishNudgeGesture(), NUDGE_SETTINGS.idleDelay);
+  }
+
+  private scheduleNudge(): void {
+    if (this.nudgeFrame !== undefined) return;
+    this.nudgeFrame = requestAnimationFrame(() => this.runNudgeFrame());
+  }
+
+  private stopNudge(disabled: boolean): void {
+    if (this.nudgeFrame !== undefined) cancelAnimationFrame(this.nudgeFrame);
+    if (this.nudgeIdleTimer !== undefined) clearTimeout(this.nudgeIdleTimer);
+    this.nudgeFrame = undefined;
+    this.nudgeIdleTimer = undefined;
+    this.nudgePending = false;
+    this.motion?.cancelViewportNudge();
+    this.setNudgeStatus(disabled ? "disabled" : "idle");
+  }
+
+  private handleMotionStatus(status: LayoutStatus): void {
+    this.emitStatus(status);
+    if (status === "settled" && this.nudgeStatus === "active") this.setNudgeStatus("idle");
+  }
+
+  private readonly handleCameraUpdate = (state: { ratio: number }): void => {
+    this.applyLabelLod(state.ratio);
+    if (this.suppressCameraNudge) {
+      this.lastCameraRatio = state.ratio;
+      return;
+    }
+    if (Math.abs(state.ratio - this.lastCameraRatio) <= NUDGE_SETTINGS.zoomEpsilon) return;
+    this.lastCameraRatio = state.ratio;
+    if (!this.nudgeEligible()) {
+      this.setNudgeStatus("disabled");
+      return;
+    }
+    this.nudgePending = true;
+    this.scheduleNudge();
+  };
 
   private bindInteractions(): void {
     this.renderer.on("downNode", ({ node, event, preventSigmaDefault }) => {
@@ -211,6 +368,7 @@ export class GraphViewportSession {
 
   private beginDrag(id: string, event: { x: number; y: number; original: Event }): void {
     if (!this.displayGraph.hasNode(id)) return;
+    this.stopNudge(!this.nudgeEligible());
     const position = this.positions.getCurrent(id);
     this.drag = {
       id,
@@ -305,6 +463,7 @@ export class GraphViewportSession {
       this.selected && nextGraph.hasNode(this.selected)
         ? neighborsOf(nextGraph, this.selected)
         : new Set<string>();
+    this.recomputePriorityNeighborLabels();
     this.renderer.setGraph(nextGraph);
   }
 
@@ -315,6 +474,7 @@ export class GraphViewportSession {
   }
 
   private stopMotion(): void {
+    this.stopNudge(true);
     if (this.motionFrame !== undefined) cancelAnimationFrame(this.motionFrame);
     this.motionFrame = undefined;
     this.motion?.kill();
@@ -325,22 +485,27 @@ export class GraphViewportSession {
     const snapshot = this.snapshot;
     if (!snapshot) return;
     if (snapshot.projection.nodes.size <= 1) {
+      this.setNudgeStatus("disabled");
       this.emitStatus("settled");
       return;
     }
     if (!isMotionEligible(snapshot.projection, snapshot.compact)) {
+      this.setNudgeStatus("disabled");
       this.emitStatus("static");
       return;
     }
     if (!snapshot.motionEnabled) {
+      this.setNudgeStatus("disabled");
       this.emitStatus("paused");
       return;
     }
 
+    this.setNudgeStatus(snapshot.reducedMotion ? "disabled" : "idle");
+
     const motion = new GraphMotionController({
       graph: this.displayGraph,
       positions: this.positions,
-      onStatus: (status) => this.emitStatus(status),
+      onStatus: (status) => this.handleMotionStatus(status),
       onPinnedChange: () => {
         this.emitPinnedCount();
         this.renderer.refresh();
@@ -349,11 +514,18 @@ export class GraphViewportSession {
     this.motion = motion;
     this.motionFrame = requestAnimationFrame(() => {
       this.motionFrame = undefined;
-      void motion.start().catch((error: unknown) => {
-        if (this.destroyed || this.motion !== motion) return;
-        console.error("Rhizome motion could not start", error);
-        this.emitStatus("paused");
-      });
+      void motion
+        .start()
+        .then(() => {
+          if (this.destroyed || this.motion !== motion || !this.nudgePending) return;
+          this.scheduleNudge();
+        })
+        .catch((error: unknown) => {
+          if (this.destroyed || this.motion !== motion) return;
+          console.error("Rhizome motion could not start", error);
+          this.setNudgeStatus("disabled");
+          this.emitStatus("paused");
+        });
     });
   }
 
@@ -373,8 +545,18 @@ export class GraphViewportSession {
       if (!data) return;
       const camera = this.renderer.getCamera();
       const target = { x: data.x, y: data.y, ratio: Math.min(camera.getState().ratio, 0.85) };
-      if (this.snapshot?.reducedMotion) camera.setState(target);
-      else void camera.animate(target, { duration: 280, easing: "quadraticInOut" });
+      const token = ++this.cameraAnimationToken;
+      this.suppressCameraNudge = true;
+      if (this.snapshot?.reducedMotion) {
+        camera.setState(target);
+        if (token === this.cameraAnimationToken) this.suppressCameraNudge = false;
+      } else {
+        void camera.animate(target, { duration: 280, easing: "quadraticInOut" }).finally(() => {
+          if (token !== this.cameraAnimationToken) return;
+          this.lastCameraRatio = camera.getState().ratio;
+          this.suppressCameraNudge = false;
+        });
+      }
     });
   }
 
@@ -401,6 +583,7 @@ export class GraphViewportSession {
         next.selected && this.displayGraph.hasNode(next.selected)
           ? neighborsOf(this.displayGraph, next.selected)
           : new Set<string>();
+      this.recomputePriorityNeighborLabels();
     }
 
     if (this.renderer.getSetting("hideEdgesOnMove") === nextEligible) {
@@ -435,14 +618,20 @@ export class GraphViewportSession {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
+    this.renderer.getCamera().off("updated", this.handleCameraUpdate);
     this.stopMotion();
     this.cancelDrag();
     if (this.cameraFrame !== undefined) cancelAnimationFrame(this.cameraFrame);
     this.cameraFrame = undefined;
+    this.cameraAnimationToken += 1;
+    this.suppressCameraNudge = false;
     this.hovered = undefined;
     this.hoverNeighbors.clear();
+    this.priorityNeighborLabels.clear();
+    this.labelWidths.clear();
     this.container.removeAttribute("data-hovered-node");
     this.container.removeAttribute("data-hovered-neighbor-count");
+    this.container.removeAttribute("data-nudge-status");
     this.renderer.kill();
   }
 }

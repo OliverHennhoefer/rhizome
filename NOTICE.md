@@ -10,3 +10,7 @@ graph data model and interaction design; no GPL-licensed Cosma source is include
 The bounded graph-motion interaction is informed by Quartz's MIT-licensed graph implementation.
 Rhizome retains its own Sigma renderer and data model, and uses the ISC-licensed `d3-force`
 package for transient browser-side physics.
+
+Zoom-aware label and node collision uses the Unlicense-licensed `d3-bboxCollide` package by
+Elijah Meeks. Rhizome supplies its own Sigma lifecycle, screen-to-graph sizing, motion bounds, and
+label-priority policy around that collision force.

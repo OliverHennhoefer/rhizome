@@ -9,6 +9,13 @@ import {
   ProjectionInvariantError,
   physicalLinkStrength,
 } from "../src/app/graph-layout";
+import {
+  collisionBoxForNode,
+  graphUnitsPerPixel,
+  LabelWidthCache,
+  labelLodForRatio,
+  selectPriorityLabels,
+} from "../src/app/graph-nudge";
 import type { GraphManifest } from "../src/shared/contracts";
 
 const manifest: GraphManifest = {
@@ -244,5 +251,91 @@ describe("motion policy and position state", () => {
     controller.pause();
     expect(positions.isPinned("a")).toBe(false);
     controller.kill();
+  });
+
+  it("bounds viewport nudges and temporarily fixes the selected node", async () => {
+    const source = createGraph(manifest);
+    const positions = new GraphPositionStore(source);
+    positions.setCurrent("b", { x: 2, y: 0 });
+    const display = createDisplayGraph(source, projection(["a", "b"], ["ab-link"]), positions);
+    const controller = new GraphMotionController({
+      graph: display,
+      positions,
+      onStatus: () => undefined,
+      onPinnedChange: () => undefined,
+    });
+    await controller.start();
+    controller.pause();
+
+    const selectedOrigin = positions.getCurrent("a");
+    const movingOrigin = positions.getCurrent("b");
+    const box: [[number, number], [number, number]] = [
+      [-12, -12],
+      [12, 12],
+    ];
+    expect(
+      controller.updateViewportNudge({
+        boxes: new Map([
+          ["a", box],
+          ["b", box],
+        ]),
+        maxDisplacement: 5,
+        selected: "a",
+      }),
+    ).toBe(true);
+    expect(controller.isTemporarilyFixed("a")).toBe(true);
+    controller.advance(20);
+
+    expect(positions.getCurrent("a")).toEqual(selectedOrigin);
+    expect(
+      Math.hypot(
+        positions.getCurrent("b").x - movingOrigin.x,
+        positions.getCurrent("b").y - movingOrigin.y,
+      ),
+    ).toBeLessThanOrEqual(5.000_001);
+
+    controller.cancelViewportNudge();
+    expect(controller.isTemporarilyFixed("a")).toBe(false);
+    controller.kill();
+  });
+});
+
+describe("viewport nudge geometry", () => {
+  it("builds symmetric node boxes and asymmetric priority-label boxes", () => {
+    expect(collisionBoxForNode({ radiusPixels: 6, unitsPerPixel: 2 })).toEqual([
+      [-20, -20],
+      [20, 20],
+    ]);
+    expect(
+      collisionBoxForNode({ radiusPixels: 6, unitsPerPixel: 2, labelWidthPixels: 50 }),
+    ).toEqual([
+      [-20, -20],
+      [130, 20],
+    ]);
+  });
+
+  it("converts viewport pixels and applies zoom-dependent label LOD", () => {
+    expect(graphUnitsPerPixel(({ x, y }) => ({ x: x * 3, y: y * 3 }))).toBe(3);
+    expect(labelLodForRatio(1)).toEqual({ density: 0.08, renderedSizeThreshold: 8 });
+    expect(labelLodForRatio(4)).toEqual({ density: 0.015, renderedSizeThreshold: 12 });
+  });
+
+  it("selects priority labels deterministically and caches measurements", () => {
+    const priorities = selectPriorityLabels(
+      ["low", "tie-b", "high", "tie-a"],
+      (id) => ({ low: 1, high: 5, "tie-a": 3, "tie-b": 3 })[id] ?? 0,
+      3,
+    );
+    expect([...priorities]).toEqual(["high", "tie-a", "tie-b"]);
+
+    let measurements = 0;
+    const cache = new LabelWidthCache((label) => {
+      measurements += 1;
+      return label.length * 7;
+    });
+    expect(cache.get("Rhizome")).toBe(49);
+    expect(cache.get("Rhizome")).toBe(49);
+    expect(cache.size).toBe(1);
+    expect(measurements).toBe(1);
   });
 });
