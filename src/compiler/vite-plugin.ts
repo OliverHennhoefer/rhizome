@@ -1,6 +1,6 @@
 import path from "node:path";
 import type { Plugin, ResolvedConfig, ViteDevServer } from "vite";
-import { VaultCompiler } from "./compile";
+import { VaultCompiler } from "./compile.ts";
 
 interface RhizomePluginOptions {
   configPath?: string;

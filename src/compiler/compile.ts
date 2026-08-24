@@ -15,12 +15,12 @@ import type {
   GraphManifest,
   GraphNode,
   NodeDetails,
-} from "../shared/contracts";
-import { loadConfig } from "./config";
-import { parseNote } from "./parse";
-import { renderNote } from "./render";
-import { assertNoCaseCollisions, ResolutionError, ResourceIndex } from "./resolve";
-import type { CompilationResult, ParsedNote, ResolvedOccurrence, RhizomeConfig } from "./types";
+} from "../shared/contracts.ts";
+import { loadConfig } from "./config.ts";
+import { parseNote } from "./parse.ts";
+import { renderNote } from "./render.ts";
+import { assertNoCaseCollisions, ResolutionError, ResourceIndex } from "./resolve.ts";
+import type { CompilationResult, ParsedNote, ResolvedOccurrence, RhizomeConfig } from "./types.ts";
 
 const IMAGE_EXTENSIONS = new Set([".avif", ".gif", ".jpeg", ".jpg", ".png", ".svg", ".webp"]);
 const MAX_PAGES_BYTES = 900 * 1024 * 1024;

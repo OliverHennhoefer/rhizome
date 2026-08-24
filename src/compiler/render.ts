@@ -8,8 +8,8 @@ import rehypeStringify from "rehype-stringify";
 import remarkRehype from "remark-rehype";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
-import type { ResourceIndex } from "./resolve";
-import type { ParsedNote } from "./types";
+import type { ResourceIndex } from "./resolve.ts";
+import type { ParsedNote } from "./types.ts";
 
 type WikiNode = RootContent & {
   type: "wikilink";

@@ -1,6 +1,6 @@
 import path from "node:path";
-import type { BuildDiagnostic } from "../shared/contracts";
-import type { ParsedNote, RawOccurrence } from "./types";
+import type { BuildDiagnostic } from "../shared/contracts.ts";
+import type { ParsedNote, RawOccurrence } from "./types.ts";
 
 function fold(value: string): string {
   return value.normalize("NFC").toLocaleLowerCase();

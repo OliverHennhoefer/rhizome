@@ -1,6 +1,6 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig, normalizePath } from "vite";
-import { rhizome } from "./src/compiler/vite-plugin";
+import { rhizome } from "./src/compiler/vite-plugin.ts";
 
 function normalizeBase(value: string | undefined): string {
   const base = value?.trim() || "/";
@@ -13,10 +13,15 @@ export default defineConfig({
   build: {
     target: "es2022",
     sourcemap: true,
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        manualChunks: {
-          graph2d: ["sigma", "graphology"],
+        codeSplitting: {
+          groups: [
+            {
+              name: "graph2d",
+              test: /node_modules[\\/](?:sigma|graphology)[\\/]/,
+            },
+          ],
         },
       },
     },

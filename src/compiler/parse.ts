@@ -9,8 +9,8 @@ import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { visit } from "unist-util-visit";
 import { isScalar, isSeq, LineCounter, parseDocument, type Node as YamlNode } from "yaml";
-import type { SourceRange } from "../shared/contracts";
-import type { ParsedNote, RawOccurrence, RhizomeConfig } from "./types";
+import type { SourceRange } from "../shared/contracts.ts";
+import type { ParsedNote, RawOccurrence, RhizomeConfig } from "./types.ts";
 
 type PositionedNode = RootContent & {
   position?: {

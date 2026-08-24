@@ -1,5 +1,5 @@
 import type { Root } from "mdast";
-import type { BuildDiagnostic, SourceRange } from "../shared/contracts";
+import type { BuildDiagnostic, SourceRange } from "../shared/contracts.ts";
 
 export interface RhizomeConfig {
   site: { title: string };

@@ -1,6 +1,6 @@
 import { parentPort } from "node:worker_threads";
-import { parseNote } from "./parse";
-import type { RhizomeConfig } from "./types";
+import { parseNote } from "./parse.ts";
+import type { RhizomeConfig } from "./types.ts";
 
 interface ParseRequest {
   files: string[];

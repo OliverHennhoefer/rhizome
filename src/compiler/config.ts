@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import Ajv2020 from "ajv/dist/2020.js";
 import { parse } from "yaml";
-import type { RhizomeConfig } from "./types";
+import type { RhizomeConfig } from "./types.ts";
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
