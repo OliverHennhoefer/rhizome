@@ -1,0 +1,21 @@
+site:
+  title: Rhizome
+
+content:
+  root: content
+  exclude:
+    - ".obsidian/**"
+    - "**/templates/**"
+
+relations:
+  depends-on:
+    label: Depends on
+    directed: true
+    color: "#d97757"
+  supported-by:
+    label: Supported by
+    directed: true
+    color: "#4f8fba"
+
+view:
+  default: 2d
