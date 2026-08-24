@@ -1,13 +1,8 @@
-import { useEffect, useRef } from "react";
-import Sigma from "sigma";
-import { createEdgeArrowProgram, EdgeLineProgram, type EdgeProgramType } from "sigma/rendering";
-import type { GraphManifest, GraphNode } from "../shared/contracts";
-import {
-  type GraphProjection,
-  neighborsOf,
-  type RhizomeGraph,
-  type RuntimeGraphEdge,
-} from "./graph";
+import { useEffect, useRef, useState } from "react";
+import type { GraphManifest } from "../shared/contracts";
+import type { GraphProjection, RhizomeGraph } from "./graph";
+import { isMotionEligible, type LayoutStatus } from "./graph-layout";
+import { GraphViewportSession } from "./graph-viewport";
 
 interface Props {
   graph: RhizomeGraph;
@@ -17,76 +12,142 @@ interface Props {
   onSelect: (id: string) => void;
 }
 
-const palette = ["#d97757", "#6e9f73", "#4f8fba", "#b887d4", "#d6a74b", "#58a6a6"];
-const edgePrograms = {
-  arrow: createEdgeArrowProgram<GraphNode, RuntimeGraphEdge>(),
-  line: EdgeLineProgram as EdgeProgramType<GraphNode, RuntimeGraphEdge>,
-};
+const MOTION_STORAGE_KEY = "rhizome:motion";
+
+function readMotionOverride(): boolean | undefined {
+  try {
+    const value = window.localStorage.getItem(MOTION_STORAGE_KEY);
+    return value === "on" ? true : value === "off" ? false : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function saveMotionOverride(value: boolean): void {
+  try {
+    window.localStorage.setItem(MOTION_STORAGE_KEY, value ? "on" : "off");
+  } catch {
+    // The graph remains usable when storage is unavailable.
+  }
+}
+
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const update = () => setMatches(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, [query]);
+  return matches;
+}
+
+function layoutLabel(status: LayoutStatus): string {
+  switch (status) {
+    case "loading":
+      return "Preparing motion";
+    case "running":
+      return "Graph in motion";
+    case "settled":
+      return "Graph settled";
+    case "paused":
+      return "Motion paused";
+    case "static":
+      return "Static layout";
+  }
+}
 
 export function Graph2D({ graph, manifest, projection, selected, onSelect }: Props) {
   const container = useRef<HTMLDivElement>(null);
-  const renderer = useRef<Sigma<GraphNode, RuntimeGraphEdge> | null>(null);
-  const onSelectRef = useRef(onSelect);
-  onSelectRef.current = onSelect;
+  const session = useRef<GraphViewportSession | undefined>(undefined);
+  const compact = useMediaQuery("(pointer: coarse), (max-width: 720px)");
+  const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const [motionOverride, setMotionOverride] = useState<boolean | undefined>(readMotionOverride);
+  const [status, setStatus] = useState<LayoutStatus>("paused");
+  const [pinnedCount, setPinnedCount] = useState(0);
+  const motionEnabled = motionOverride ?? !reducedMotion;
+  const eligible = isMotionEligible(projection, compact);
 
   useEffect(() => {
     if (!container.current) return;
-    const sigma = new Sigma<GraphNode, RuntimeGraphEdge>(graph, container.current, {
-      allowInvalidContainer: false,
-      defaultNodeColor: "#77927b",
-      defaultEdgeColor: "#596059",
-      edgeProgramClasses: edgePrograms,
-      hideEdgesOnMove: true,
-      labelColor: { color: "#e9eee8" },
-      labelDensity: 0.08,
-      labelGridCellSize: 120,
-      labelRenderedSizeThreshold: 8,
-      renderEdgeLabels: false,
-      zIndex: true,
+    const viewport = new GraphViewportSession(container.current, graph, {
+      onStatus: setStatus,
+      onPinnedCount: setPinnedCount,
     });
-    sigma.on("clickNode", ({ node }) => onSelectRef.current(node));
-    renderer.current = sigma;
+    session.current = viewport;
     return () => {
-      renderer.current = null;
-      sigma.kill();
+      session.current = undefined;
+      viewport.destroy();
     };
   }, [graph]);
 
   useEffect(() => {
-    const sigma = renderer.current;
-    if (!sigma) return;
-    const neighbors = selected ? neighborsOf(graph, selected) : new Set<string>();
-    sigma.setSetting("nodeReducer", (node, data) => {
-      if (!projection.nodes.has(node)) return { ...data, hidden: true };
-      const isSelected = node === selected;
-      const isNeighbor = neighbors.has(node);
-      const community = Number(data.community ?? 0);
-      return {
-        ...data,
-        label: String(data.title ?? node),
-        color: isSelected
-          ? "#f4d35e"
-          : isNeighbor
-            ? "#a5c9a8"
-            : palette[Math.abs(community) % palette.length],
-        size: isSelected ? 13 : Math.min(10, 4 + Math.sqrt(Number(data.degree ?? 0)) * 1.7),
-        zIndex: isSelected ? 3 : isNeighbor ? 2 : 1,
-        forceLabel: isSelected || isNeighbor,
-      };
+    session.current?.sync({
+      projection,
+      relations: manifest.config.relations,
+      selected,
+      motionEnabled,
+      compact,
+      reducedMotion,
+      onSelect,
     });
-    sigma.setSetting("edgeReducer", (edge, data) => {
-      if (!projection.edges.has(edge)) return { ...data, hidden: true };
-      const active = selected && (data.source === selected || data.target === selected);
-      const relation = manifest.config.relations[data.relationType];
-      return {
-        ...data,
-        color: active ? (relation?.color ?? "#d8e1d7") : `${relation?.color ?? "#667166"}88`,
-        size: active ? 2.4 : 0.8,
-        zIndex: active ? 2 : 1,
-      };
-    });
-    sigma.refresh();
-  }, [graph, manifest, projection, selected]);
+  }, [
+    compact,
+    manifest.config.relations,
+    motionEnabled,
+    onSelect,
+    projection,
+    reducedMotion,
+    selected,
+  ]);
 
-  return <div className="graph-canvas" data-testid="graph-2d" ref={container} />;
+  const toggleMotion = () => {
+    const next = !motionEnabled;
+    setMotionOverride(next);
+    saveMotionOverride(next);
+  };
+
+  return (
+    <>
+      <div
+        className="graph-canvas"
+        data-layout-status={status}
+        data-pinned-count={pinnedCount}
+        data-testid="graph-2d"
+        ref={container}
+      />
+      <div className="graph-toolbar" aria-label="Graph layout controls" role="toolbar">
+        <span aria-live="polite" className={`layout-status status-${status}`}>
+          <i aria-hidden="true" />
+          {layoutLabel(status)}
+        </span>
+        <button
+          aria-pressed={motionEnabled}
+          disabled={!eligible}
+          onClick={toggleMotion}
+          title={
+            !eligible
+              ? projection.nodes.size <= 1
+                ? "Motion requires at least two visible nodes"
+                : "Focus or filter the graph to enable motion"
+              : undefined
+          }
+          type="button"
+        >
+          Motion {motionEnabled ? "on" : "off"}
+        </button>
+        <button onClick={() => session.current?.resetLayout()} type="button">
+          Reset layout
+        </button>
+      </div>
+      <div className="graph-help">
+        {status === "static"
+          ? "Focus or filter to enable motion"
+          : compact
+            ? "Drag nodes to explore"
+            : "Drag nodes · Shift-drag to pin"}
+      </div>
+    </>
+  );
 }

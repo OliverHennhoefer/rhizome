@@ -1,0 +1,426 @@
+import Sigma from "sigma";
+import {
+  createEdgeArrowProgram,
+  drawDiscNodeHover,
+  EdgeLineProgram,
+  type EdgeProgramType,
+  type NodeHoverDrawingFunction,
+} from "sigma/rendering";
+import type { GraphNode, PublicConfig } from "../shared/contracts";
+import {
+  type GraphProjection,
+  neighborsOf,
+  type RhizomeGraph,
+  type RuntimeGraphEdge,
+  reconcileProjectedHover,
+} from "./graph";
+import {
+  createDisplayGraph,
+  GraphMotionController,
+  GraphPositionStore,
+  isMotionEligible,
+  type LayoutStatus,
+  nodeColorWithAlpha,
+  nodeRadius,
+} from "./graph-layout";
+
+export interface GraphViewportSnapshot {
+  projection: GraphProjection;
+  relations: PublicConfig["relations"];
+  selected?: string;
+  motionEnabled: boolean;
+  compact: boolean;
+  reducedMotion: boolean;
+  onSelect: (id: string) => void;
+}
+
+interface GraphViewportEvents {
+  onStatus: (status: LayoutStatus) => void;
+  onPinnedCount: (count: number) => void;
+}
+
+interface DragState {
+  id: string;
+  moved: boolean;
+  touch: boolean;
+  wasPinned: boolean;
+  startX: number;
+  startY: number;
+}
+
+const palette = ["#d97757", "#6e9f73", "#4f8fba", "#b887d4", "#d6a74b", "#58a6a6"];
+const edgePrograms = {
+  arrow: createEdgeArrowProgram<GraphNode, RuntimeGraphEdge>(),
+  line: EdgeLineProgram as EdgeProgramType<GraphNode, RuntimeGraphEdge>,
+};
+
+export class GraphViewportSession {
+  private readonly container: HTMLDivElement;
+  private readonly sourceGraph: RhizomeGraph;
+  private readonly renderer: Sigma<GraphNode, RuntimeGraphEdge>;
+  private readonly positions: GraphPositionStore;
+  private readonly events: GraphViewportEvents;
+  private displayGraph: RhizomeGraph;
+  private snapshot?: GraphViewportSnapshot;
+  private motion?: GraphMotionController;
+  private motionFrame?: number;
+  private cameraFrame?: number;
+  private drag?: DragState;
+  private hovered?: string;
+  private hoverNeighbors = new Set<string>();
+  private selected?: string;
+  private selectedNeighbors = new Set<string>();
+  private suppressClickUntil = 0;
+  private destroyed = false;
+
+  constructor(container: HTMLDivElement, sourceGraph: RhizomeGraph, events: GraphViewportEvents) {
+    this.container = container;
+    this.sourceGraph = sourceGraph;
+    this.events = events;
+    this.positions = new GraphPositionStore(sourceGraph);
+    this.displayGraph = sourceGraph.nullCopy();
+
+    const drawHover: NodeHoverDrawingFunction<GraphNode, RuntimeGraphEdge> = (
+      context,
+      data,
+      settings,
+    ) => {
+      const key = (data as typeof data & { key?: string }).key;
+      if (key && this.positions.isPinned(key)) {
+        context.beginPath();
+        context.arc(data.x, data.y, data.size + 4, 0, Math.PI * 2);
+        context.strokeStyle = "#f4d35ecc";
+        context.lineWidth = 2;
+        context.stroke();
+      }
+      if (key === this.hovered) drawDiscNodeHover(context, data, settings);
+    };
+
+    this.renderer = new Sigma<GraphNode, RuntimeGraphEdge>(this.displayGraph, container, {
+      allowInvalidContainer: false,
+      defaultDrawNodeHover: drawHover,
+      defaultNodeColor: "#77927b",
+      defaultEdgeColor: "#596059",
+      edgeProgramClasses: edgePrograms,
+      hideEdgesOnMove: true,
+      labelColor: { color: "#e9eee8" },
+      labelDensity: 0.08,
+      labelGridCellSize: 120,
+      labelRenderedSizeThreshold: 8,
+      renderEdgeLabels: false,
+      zIndex: true,
+    });
+    this.renderer.setSetting("nodeReducer", (node, data) => this.reduceNode(node, data));
+    this.renderer.setSetting("edgeReducer", (_, data) => this.reduceEdge(data));
+    this.bindInteractions();
+  }
+
+  private reduceNode(node: string, data: GraphNode) {
+    const isSelected = node === this.selected;
+    const isSelectedNeighbor = this.selectedNeighbors.has(node);
+    const isHovered = node === this.hovered;
+    const isHoverNeighbor = this.hoverNeighbors.has(node);
+    const isPinned = this.positions.isPinned(node);
+    const hoverRelated = !this.hovered || isHovered || isHoverNeighbor;
+    const community = Number(data.community ?? 0);
+    const color = isSelected
+      ? "#f4d35e"
+      : isSelectedNeighbor
+        ? "#a5c9a8"
+        : palette[Math.abs(community) % palette.length];
+    const size = isSelected ? 13 : nodeRadius(data);
+    return {
+      ...data,
+      label: String(data.title ?? node),
+      color: hoverRelated ? color : nodeColorWithAlpha(color, "2e"),
+      size: isHovered ? size + 2 : size,
+      zIndex: isSelected || isHovered ? 4 : isPinned ? 3 : isSelectedNeighbor ? 2 : 1,
+      forceLabel: isSelected || isSelectedNeighbor || isHovered || isPinned,
+      highlighted: isPinned,
+    };
+  }
+
+  private reduceEdge(data: RuntimeGraphEdge) {
+    const selectedActive =
+      this.selected && (data.source === this.selected || data.target === this.selected);
+    const hoverActive =
+      this.hovered && (data.source === this.hovered || data.target === this.hovered);
+    const relation = this.snapshot?.relations[data.relationType];
+    const color = relation?.color ?? (data.relationType === "link" ? "#829184" : "#667166");
+    const active = this.hovered ? hoverActive : selectedActive;
+    return {
+      ...data,
+      color: active ? color : nodeColorWithAlpha(color, this.hovered ? "20" : "78"),
+      size: active ? 2.4 : this.hovered ? 0.55 : 0.8,
+      zIndex: active ? 2 : 1,
+    };
+  }
+
+  private bindInteractions(): void {
+    this.renderer.on("downNode", ({ node, event, preventSigmaDefault }) => {
+      preventSigmaDefault();
+      this.beginDrag(node, event);
+    });
+    this.renderer.on("clickNode", ({ node }) => {
+      if (performance.now() >= this.suppressClickUntil) this.snapshot?.onSelect(node);
+    });
+    this.renderer.on("enterNode", ({ node }) => this.setHover(node));
+    this.renderer.on("leaveNode", ({ node }) => {
+      if (this.hovered === node) this.clearHover();
+    });
+
+    const mouse = this.renderer.getMouseCaptor();
+    const touch = this.renderer.getTouchCaptor();
+    mouse.on("mousemovebody", (event) => this.moveDrag(event));
+    mouse.on("mouseup", (event) => this.finishDrag(event.original));
+    touch.on("touchmovebody", (event) => {
+      if (event.touches.length !== 1) {
+        this.finishDrag(event.original);
+        return;
+      }
+      this.moveDrag({
+        ...event.touches[0],
+        preventSigmaDefault: event.preventSigmaDefault,
+      });
+    });
+    touch.on("touchup", (event) => this.finishDrag(event.original));
+  }
+
+  private beginDrag(id: string, event: { x: number; y: number; original: Event }): void {
+    if (!this.displayGraph.hasNode(id)) return;
+    const position = this.positions.getCurrent(id);
+    this.drag = {
+      id,
+      moved: false,
+      touch: "touches" in event.original,
+      wasPinned: this.positions.isPinned(id),
+      startX: event.x,
+      startY: event.y,
+    };
+    this.renderer.getCamera().disable();
+    this.motion?.beginDrag(id, position);
+  }
+
+  private moveDrag(point: { x: number; y: number; preventSigmaDefault(): void }): void {
+    const drag = this.drag;
+    if (!drag || !this.displayGraph.hasNode(drag.id)) return;
+    point.preventSigmaDefault();
+    if (Math.hypot(point.x - drag.startX, point.y - drag.startY) > 4) drag.moved = true;
+    const position = this.renderer.viewportToGraph(point);
+    if (this.motion) this.motion.moveDrag(drag.id, position);
+    else {
+      this.positions.setCurrent(drag.id, position);
+      this.displayGraph.mergeNodeAttributes(drag.id, position);
+    }
+  }
+
+  private finishDrag(original?: Event): void {
+    const drag = this.drag;
+    if (!drag) return;
+    const keepPinned = !drag.touch && original instanceof MouseEvent && original.shiftKey;
+    if (this.motion) this.motion.endDrag(drag.id, keepPinned);
+    else {
+      if (keepPinned) this.positions.pin(drag.id);
+      else this.positions.release(drag.id);
+      this.emitPinnedCount();
+    }
+    if (drag.moved) this.suppressClickUntil = performance.now() + 300;
+    this.drag = undefined;
+    this.renderer.getCamera().enable();
+    this.renderer.refresh();
+  }
+
+  private cancelDrag(): void {
+    const drag = this.drag;
+    if (!drag) return;
+    if (drag.wasPinned) this.positions.pin(drag.id);
+    else this.positions.release(drag.id);
+    this.drag = undefined;
+    this.renderer.getCamera().enable();
+    this.emitPinnedCount();
+  }
+
+  private setHover(node: string): void {
+    this.hovered = node;
+    this.hoverNeighbors = neighborsOf(this.displayGraph, node);
+    this.writeHoverAttributes();
+    this.renderer.refresh();
+  }
+
+  private clearHover(): void {
+    this.hovered = undefined;
+    this.hoverNeighbors.clear();
+    this.container.removeAttribute("data-hovered-node");
+    this.container.removeAttribute("data-hovered-neighbor-count");
+    this.renderer.refresh();
+  }
+
+  private writeHoverAttributes(): void {
+    if (!this.hovered) return;
+    this.container.setAttribute("data-hovered-node", this.hovered);
+    this.container.setAttribute("data-hovered-neighbor-count", String(this.hoverNeighbors.size));
+  }
+
+  private reconcileHover(nextGraph: RhizomeGraph): void {
+    if (!this.hovered) return;
+    const reconciled = reconcileProjectedHover(nextGraph, this.hovered);
+    this.hovered = reconciled.hovered;
+    this.hoverNeighbors = reconciled.neighbors;
+    if (!this.hovered) {
+      this.container.removeAttribute("data-hovered-node");
+      this.container.removeAttribute("data-hovered-neighbor-count");
+      return;
+    }
+    this.writeHoverAttributes();
+  }
+
+  private installDisplayGraph(projection: GraphProjection): void {
+    const nextGraph = createDisplayGraph(this.sourceGraph, projection, this.positions);
+    this.reconcileHover(nextGraph);
+    this.displayGraph = nextGraph;
+    this.selectedNeighbors =
+      this.selected && nextGraph.hasNode(this.selected)
+        ? neighborsOf(nextGraph, this.selected)
+        : new Set<string>();
+    this.renderer.setGraph(nextGraph);
+  }
+
+  private replaceDisplayGraph(projection: GraphProjection): void {
+    this.stopMotion();
+    this.cancelDrag();
+    this.installDisplayGraph(projection);
+  }
+
+  private stopMotion(): void {
+    if (this.motionFrame !== undefined) cancelAnimationFrame(this.motionFrame);
+    this.motionFrame = undefined;
+    this.motion?.kill();
+    this.motion = undefined;
+  }
+
+  private startMotion(): void {
+    const snapshot = this.snapshot;
+    if (!snapshot) return;
+    if (snapshot.projection.nodes.size <= 1) {
+      this.emitStatus("settled");
+      return;
+    }
+    if (!isMotionEligible(snapshot.projection, snapshot.compact)) {
+      this.emitStatus("static");
+      return;
+    }
+    if (!snapshot.motionEnabled) {
+      this.emitStatus("paused");
+      return;
+    }
+
+    const motion = new GraphMotionController({
+      graph: this.displayGraph,
+      positions: this.positions,
+      onStatus: (status) => this.emitStatus(status),
+      onPinnedChange: () => {
+        this.emitPinnedCount();
+        this.renderer.refresh();
+      },
+    });
+    this.motion = motion;
+    this.motionFrame = requestAnimationFrame(() => {
+      this.motionFrame = undefined;
+      void motion.start().catch((error: unknown) => {
+        if (this.destroyed || this.motion !== motion) return;
+        console.error("Rhizome motion could not start", error);
+        this.emitStatus("paused");
+      });
+    });
+  }
+
+  private emitStatus(status: LayoutStatus): void {
+    if (!this.destroyed) this.events.onStatus(status);
+  }
+
+  private emitPinnedCount(): void {
+    if (!this.destroyed) this.events.onPinnedCount(this.positions.pinnedCount);
+  }
+
+  private centerSelection(id: string): void {
+    if (this.cameraFrame !== undefined) cancelAnimationFrame(this.cameraFrame);
+    this.cameraFrame = requestAnimationFrame(() => {
+      this.cameraFrame = undefined;
+      const data = this.renderer.getNodeDisplayData(id);
+      if (!data) return;
+      const camera = this.renderer.getCamera();
+      const target = { x: data.x, y: data.y, ratio: Math.min(camera.getState().ratio, 0.85) };
+      if (this.snapshot?.reducedMotion) camera.setState(target);
+      else void camera.animate(target, { duration: 280, easing: "quadraticInOut" });
+    });
+  }
+
+  sync(next: GraphViewportSnapshot): void {
+    if (this.destroyed) return;
+    const previous = this.snapshot;
+    const projectionChanged = !previous || previous.projection !== next.projection;
+    const selectionChanged = previous?.selected !== next.selected;
+    const previousEligible = previous
+      ? isMotionEligible(previous.projection, previous.compact)
+      : undefined;
+    const nextEligible = isMotionEligible(next.projection, next.compact);
+    const motionPolicyChanged =
+      !previous ||
+      previous.motionEnabled !== next.motionEnabled ||
+      previousEligible !== nextEligible;
+    const relationsChanged = previous?.relations !== next.relations;
+
+    this.snapshot = next;
+    this.selected = next.selected;
+
+    if (projectionChanged) this.replaceDisplayGraph(next.projection);
+    else if (selectionChanged) {
+      this.selectedNeighbors =
+        next.selected && this.displayGraph.hasNode(next.selected)
+          ? neighborsOf(this.displayGraph, next.selected)
+          : new Set<string>();
+    }
+
+    if (this.renderer.getSetting("hideEdgesOnMove") === nextEligible) {
+      this.renderer.setSetting("hideEdgesOnMove", !nextEligible);
+    }
+
+    if (projectionChanged || motionPolicyChanged) {
+      if (!projectionChanged) this.stopMotion();
+      this.startMotion();
+    }
+
+    if (!projectionChanged && (selectionChanged || relationsChanged)) this.renderer.refresh();
+    if (previous && selectionChanged && next.selected && this.displayGraph.hasNode(next.selected)) {
+      this.centerSelection(next.selected);
+    }
+  }
+
+  resetLayout(): void {
+    const snapshot = this.snapshot;
+    if (!snapshot || this.destroyed) return;
+    this.stopMotion();
+    this.cancelDrag();
+    this.positions.reset();
+    this.emitPinnedCount();
+    this.installDisplayGraph(snapshot.projection);
+    const camera = this.renderer.getCamera();
+    if (snapshot.reducedMotion) camera.setState({ x: 0.5, y: 0.5, ratio: 1, angle: 0 });
+    else void camera.animatedReset({ duration: 280 });
+    this.startMotion();
+  }
+
+  destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    this.stopMotion();
+    this.cancelDrag();
+    if (this.cameraFrame !== undefined) cancelAnimationFrame(this.cameraFrame);
+    this.cameraFrame = undefined;
+    this.hovered = undefined;
+    this.hoverNeighbors.clear();
+    this.container.removeAttribute("data-hovered-node");
+    this.container.removeAttribute("data-hovered-neighbor-count");
+    this.renderer.kill();
+  }
+}

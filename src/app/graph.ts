@@ -1,4 +1,5 @@
 import Graph from "graphology";
+import type { AbstractGraph } from "graphology-types";
 import type { GraphEdge, GraphManifest, GraphNode } from "../shared/contracts";
 
 export interface ProjectionInput {
@@ -16,7 +17,7 @@ export interface GraphProjection {
 }
 
 export type RuntimeGraphEdge = GraphEdge & { relationType: string };
-export type RhizomeGraph = Graph<GraphNode, RuntimeGraphEdge>;
+export type RhizomeGraph = AbstractGraph<GraphNode, RuntimeGraphEdge>;
 
 export function createGraph(manifest: GraphManifest): RhizomeGraph {
   const graph: RhizomeGraph = new Graph({ type: "mixed", multi: true, allowSelfLoops: true });
@@ -114,4 +115,12 @@ export function neighborsOf(graph: RhizomeGraph, nodeId: string): Set<string> {
   if (!graph.hasNode(nodeId)) return neighbors;
   graph.forEachNeighbor(nodeId, (neighbor) => neighbors.add(neighbor));
   return neighbors;
+}
+
+export function reconcileProjectedHover(
+  graph: RhizomeGraph,
+  hovered?: string,
+): { hovered?: string; neighbors: Set<string> } {
+  if (!hovered || !graph.hasNode(hovered)) return { neighbors: new Set<string>() };
+  return { hovered, neighbors: neighborsOf(graph, hovered) };
 }

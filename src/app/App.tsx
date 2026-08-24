@@ -71,6 +71,7 @@ export function App() {
   useEffect(() => writeUrlState(state), [state]);
 
   const graph = useMemo(() => (manifest ? createGraph(manifest) : undefined), [manifest]);
+  const focusNode = state.focus ? state.note : undefined;
   const projection = useMemo(
     () =>
       graph
@@ -79,20 +80,11 @@ export function App() {
             visibleTags: state.tags,
             visibleRelations: state.relations,
             direction: state.direction,
-            focusNode: state.focus ? state.note : undefined,
+            focusNode,
             depth: state.depth,
           })
         : undefined,
-    [
-      graph,
-      state.depth,
-      state.direction,
-      state.focus,
-      state.note,
-      state.relations,
-      state.tags,
-      state.types,
-    ],
+    [graph, state.depth, state.direction, focusNode, state.relations, state.tags, state.types],
   );
 
   const results = useMemo(() => {
