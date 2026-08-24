@@ -3,9 +3,9 @@ import { createGraph, projectGraph } from "../src/app/graph";
 import type { GraphManifest } from "../src/shared/contracts";
 
 const manifest: GraphManifest = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   contentHash: "fixture",
-  config: { site: { title: "Test" }, relations: {}, view: { default: "2d" } },
+  config: { site: { title: "Test" }, relations: {} },
   nodes: [
     {
       id: "a",
@@ -17,7 +17,6 @@ const manifest: GraphManifest = {
       detailsRef: "a",
       x: 0,
       y: 0,
-      z: 0,
       community: 0,
       degree: 1,
     },
@@ -31,7 +30,6 @@ const manifest: GraphManifest = {
       detailsRef: "b",
       x: 1,
       y: 0,
-      z: 0,
       community: 0,
       degree: 2,
     },
@@ -45,7 +43,6 @@ const manifest: GraphManifest = {
       detailsRef: "c",
       x: 2,
       y: 0,
-      z: 0,
       community: 1,
       degree: 1,
     },

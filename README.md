@@ -5,7 +5,7 @@ source material; the graph is the product.
 
 Rhizome compiles links, typed frontmatter relationships, source ranges, backlinks, communities,
 and deterministic coordinates into a static browser application. Notes are fetched only when
-selected. The precise 2D view and optional 3D view use the same graph projection and URL state.
+selected. One focused 2D interface handles graph exploration, filtering, and directional analysis.
 
 ## Publish your vault
 
@@ -86,12 +86,12 @@ vault, report build time and compressed manifest size, and remove the fixture.
 content/                  Obsidian-compatible source vault
 src/compiler/             discover → parse → filter → resolve → graph → layout → emit
 src/shared/contracts.ts   versioned compiler/browser boundary
-src/app/                  projection, URL state, Sigma, Three.js, reader, controls
+src/app/                  projection, URL state, Sigma, reader, controls
 ```
 
 The browser receives `data/graph.json` at startup. Every node points to one content-hashed details
-artifact containing sanitized HTML and exact relationship evidence. Three.js is dynamically
-imported only after 3D is selected; Markdown parsing and layout code never enter the browser bundle.
+artifact containing sanitized HTML and exact relationship evidence. Markdown parsing and layout
+code never enter the browser bundle.
 
 Raw HTML, math, Mermaid, transclusion, non-image media embeds, Canvas, Bases, full-text search,
 editing, authentication, collaboration, and arbitrary graph queries are deliberately outside v1.

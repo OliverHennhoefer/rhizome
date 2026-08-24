@@ -11,7 +11,7 @@ const content = path.join(root, "content");
 await mkdir(content);
 await writeFile(
   path.join(root, "rhizome.config.yaml"),
-  `site:\n  title: Benchmark\ncontent:\n  root: content\n  exclude: []\nrelations: {}\nview:\n  default: 2d\n`,
+  `site:\n  title: Benchmark\ncontent:\n  root: content\n  exclude: []\nrelations: {}\n`,
 );
 await writeFile(
   path.join(root, "rhizome.schema.json"),

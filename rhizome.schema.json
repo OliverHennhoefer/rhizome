@@ -4,7 +4,7 @@
   "title": "Rhizome configuration",
   "type": "object",
   "additionalProperties": false,
-  "required": ["site", "content", "relations", "view"],
+  "required": ["site", "content", "relations"],
   "properties": {
     "site": {
       "type": "object",
@@ -33,12 +33,6 @@
           "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }
         }
       }
-    },
-    "view": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["default"],
-      "properties": { "default": { "enum": ["2d", "3d"] } }
     }
   }
 }

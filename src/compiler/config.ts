@@ -31,7 +31,6 @@ export async function loadConfig(projectRoot: string, configPath: string): Promi
   assertRecord(input.site, "site");
   assertRecord(input.content, "content");
   assertRecord(input.relations, "relations");
-  assertRecord(input.view, "view");
 
   if (typeof input.site.title !== "string" || !input.site.title.trim()) {
     throw new Error("site.title must be a non-empty string");
@@ -39,10 +38,6 @@ export async function loadConfig(projectRoot: string, configPath: string): Promi
   if (typeof input.content.root !== "string" || !input.content.root.trim()) {
     throw new Error("content.root must be a non-empty string");
   }
-  if (input.view.default !== "2d" && input.view.default !== "3d") {
-    throw new Error('view.default must be "2d" or "3d"');
-  }
-
   const exclude = input.content.exclude ?? [];
   if (!Array.isArray(exclude) || exclude.some((item) => typeof item !== "string")) {
     throw new Error("content.exclude must be an array of glob strings");
@@ -70,6 +65,5 @@ export async function loadConfig(projectRoot: string, configPath: string): Promi
     site: { title: input.site.title },
     content: { root: input.content.root, exclude: exclude as string[] },
     relations,
-    view: { default: input.view.default },
   };
 }

@@ -5,7 +5,6 @@ export interface RhizomeConfig {
   site: { title: string };
   content: { root: string; exclude: string[] };
   relations: Record<string, { label: string; directed: boolean; color: string }>;
-  view: { default: "2d" | "3d" };
 }
 
 export interface RawOccurrence {

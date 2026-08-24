@@ -17,11 +17,10 @@ export interface RelationDefinition {
 export interface PublicConfig {
   site: { title: string };
   relations: Record<string, RelationDefinition>;
-  view: { default: "2d" | "3d" };
 }
 
 export interface GraphManifest {
-  schemaVersion: 1;
+  schemaVersion: 2;
   contentHash: string;
   config: PublicConfig;
   nodes: GraphNode[];
@@ -45,7 +44,6 @@ export interface GraphNode {
   detailsRef: string;
   x: number;
   y: number;
-  z: number;
   community: number;
   degree: number;
 }

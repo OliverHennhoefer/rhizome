@@ -16,6 +16,3 @@ relations:
     label: Supported by
     directed: true
     color: "#4f8fba"
-
-view:
-  default: 2d

@@ -247,7 +247,6 @@ function resolveAll(
             detailsRef: "",
             x: 0,
             y: 0,
-            z: 0,
             community: 0,
             degree: 0,
           });
@@ -272,7 +271,6 @@ function resolveAll(
               detailsRef: "",
               x: 0,
               y: 0,
-              z: 0,
               community: 0,
               degree: 0,
             });
@@ -348,7 +346,7 @@ function initialCoordinate(id: string): { x: number; y: number } {
 function layout(
   nodes: GraphNode[],
   edges: GraphEdge[],
-  previous: Map<string, { x: number; y: number; z: number; community: number }> | undefined,
+  previous: Map<string, { x: number; y: number; community: number }> | undefined,
   incremental: boolean,
 ): void {
   const graph = new Graph({ type: "undirected", multi: true, allowSelfLoops: false });
@@ -380,17 +378,12 @@ function layout(
     }
   }
 
-  const communityIds = [...new Set(Object.values(communities))].sort((a, b) => a - b);
-  const communityRank = new Map(communityIds.map((community, index) => [community, index]));
-  const center = (communityIds.length - 1) / 2;
   for (const node of nodes) {
     const attributes = graph.getNodeAttributes(node.id);
     const preserved = incremental ? previous?.get(node.id) : undefined;
     const community = communities[node.id] ?? preserved?.community ?? 0;
-    const jitter = (Number.parseInt(sha256(node.id).slice(0, 4), 16) / 0xffff - 0.5) * 0.4;
     node.x = preserved?.x ?? attributes.x ?? 0;
     node.y = preserved?.y ?? attributes.y ?? 0;
-    node.z = preserved?.z ?? ((communityRank.get(community) ?? 0) - center) * 3 + jitter;
     node.community = community;
     node.degree = graph.hasNode(node.id) ? graph.degree(node.id) : 0;
   }
@@ -433,10 +426,7 @@ function groupEvidence(
 function previousCoordinates(manifest: GraphManifest | undefined) {
   if (!manifest) return undefined;
   return new Map(
-    manifest.nodes.map((node) => [
-      node.id,
-      { x: node.x, y: node.y, z: node.z, community: node.community },
-    ]),
+    manifest.nodes.map((node) => [node.id, { x: node.x, y: node.y, community: node.community }]),
   );
 }
 
@@ -555,7 +545,6 @@ export class VaultCompiler {
         detailsRef: "",
         x: 0,
         y: 0,
-        z: 0,
         community: 0,
         degree: 0,
       })),
@@ -585,11 +574,10 @@ export class VaultCompiler {
     }
 
     const manifestCore = {
-      schemaVersion: 1 as const,
+      schemaVersion: 2 as const,
       config: {
         site: config.site,
         relations: config.relations,
-        view: config.view,
       },
       nodes,
       edges: builtEdges.edges,

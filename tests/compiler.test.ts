@@ -13,7 +13,7 @@ async function fixture(files: Record<string, string>): Promise<string> {
   await mkdir(path.join(root, "content"), { recursive: true });
   await writeFile(
     path.join(root, "rhizome.config.yaml"),
-    `site:\n  title: Test\ncontent:\n  root: content\n  exclude: []\nrelations:\n  depends-on:\n    label: Depends on\n    directed: true\n    color: "#d97757"\n  related-to:\n    label: Related to\n    directed: false\n    color: "#4f8fba"\nview:\n  default: 2d\n`,
+    `site:\n  title: Test\ncontent:\n  root: content\n  exclude: []\nrelations:\n  depends-on:\n    label: Depends on\n    directed: true\n    color: "#d97757"\n  related-to:\n    label: Related to\n    directed: false\n    color: "#4f8fba"\n`,
   );
   await writeFile(
     path.join(root, "rhizome.schema.json"),
@@ -33,7 +33,7 @@ function manifestFrom(assets: Map<string, string | Uint8Array>): GraphManifest {
 
 function semantic(manifest: GraphManifest) {
   return {
-    nodes: manifest.nodes.map(({ x: _x, y: _y, z: _z, community: _community, ...node }) => node),
+    nodes: manifest.nodes.map(({ x: _x, y: _y, community: _community, ...node }) => node),
     edges: manifest.edges,
     facets: manifest.facets,
     diagnostics: manifest.diagnostics,
@@ -52,7 +52,9 @@ describe("vault compiler", () => {
     });
     const result = await new VaultCompiler({ projectRoot: root }).clean();
     const manifest = manifestFrom(result.assets);
+    expect(manifest.schemaVersion).toBe(2);
     expect(manifest.nodes.map((node) => node.id)).toEqual(["Alpha", "folder/Beta"]);
+    expect(manifest.nodes.every((node) => !("z" in node))).toBe(true);
     expect(manifest.edges.map((edge) => edge.type).sort()).toEqual(["depends-on", "link"]);
     expect(manifest.facets.tags.architecture).toEqual(["Alpha"]);
     expect(manifest.facets.tags.compiler).toEqual(["Alpha"]);

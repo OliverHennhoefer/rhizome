@@ -140,29 +140,6 @@ button {
   white-space: nowrap;
 }
 
-.view-switch {
-  justify-self: end;
-  display: flex;
-  margin: 0;
-  padding: 3px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #181d17;
-}
-.view-switch button {
-  min-width: 48px;
-  padding: 6px 10px;
-  border: 0;
-  border-radius: 5px;
-  color: var(--muted);
-  background: transparent;
-  cursor: pointer;
-}
-.view-switch button.active {
-  color: #10130f;
-  background: var(--accent);
-}
-
 .controls {
   grid-column: 1;
   grid-row: 2;
@@ -289,13 +266,9 @@ button {
   min-height: 0;
   background: radial-gradient(circle at 50% 44%, #1b221a 0, #10130f 65%);
 }
-.graph-canvas,
-.graph-3d {
+.graph-canvas {
   position: absolute;
   inset: 0;
-}
-.graph-3d canvas {
-  display: block;
 }
 .graph-label {
   position: absolute;
@@ -321,7 +294,6 @@ button {
   letter-spacing: 0.04em;
   pointer-events: none;
 }
-.graph-loading,
 .webgl-fallback {
   display: grid;
   place-content: center;
@@ -540,10 +512,6 @@ button {
   .search-wrap {
     grid-column: 1 / -1;
     grid-row: 2;
-  }
-  .view-switch {
-    grid-column: 2;
-    grid-row: 1;
   }
   .controls {
     grid-row: 3;

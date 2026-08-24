@@ -1,11 +1,9 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { GraphManifest } from "../shared/contracts";
 import { Graph2D } from "./Graph2D";
 import { createGraph, projectGraph } from "./graph";
 import { Reader } from "./Reader";
 import { readUrlState, type UrlState, writeUrlState } from "./url-state";
-
-const Graph3D = lazy(() => import("./Graph3D"));
 
 function hasWebGl(): boolean {
   try {
@@ -61,7 +59,7 @@ export function App() {
       })
       .then((value) => {
         setManifest(value);
-        const url = readUrlState(value.config.view.default);
+        const url = readUrlState();
         if (!url.note && value.nodes.length)
           url.note = value.nodes.find((node) => node.kind === "note")?.id;
         setState(url);
@@ -172,22 +170,6 @@ export function App() {
             </div>
           )}
         </div>
-        <fieldset className="view-switch" aria-label="Graph view">
-          <button
-            className={state.view === "2d" ? "active" : ""}
-            type="button"
-            onClick={() => update({ view: "2d" })}
-          >
-            2D
-          </button>
-          <button
-            className={state.view === "3d" ? "active" : ""}
-            type="button"
-            onClick={() => update({ view: "3d" })}
-          >
-            3D
-          </button>
-        </fieldset>
       </header>
 
       <aside className="controls">
@@ -277,7 +259,7 @@ export function App() {
             <h2>Graph rendering unavailable</h2>
             <p>Search and relationship navigation remain available in this browser.</p>
           </div>
-        ) : state.view === "2d" ? (
+        ) : (
           <Graph2D
             graph={graph}
             manifest={manifest}
@@ -285,17 +267,6 @@ export function App() {
             selected={state.note}
             onSelect={select}
           />
-        ) : (
-          <Suspense
-            fallback={<div className="graph-loading">Loading the exploratory 3D view…</div>}
-          >
-            <Graph3D
-              graph={graph}
-              projection={projection}
-              selected={state.note}
-              onSelect={select}
-            />
-          </Suspense>
         )}
         <div className="stage-hint">
           {state.focus

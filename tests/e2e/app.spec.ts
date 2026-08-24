@@ -19,16 +19,10 @@ test("selects notes, restores query state, and loads details lazily", async ({ p
   ).toBeVisible();
 });
 
-test("keeps 3D out of the initial path and loads it on demand", async ({ page }) => {
-  const scripts: string[] = [];
-  page.on("response", (response) => {
-    if (response.request().resourceType() === "script") scripts.push(response.url());
-  });
+test("renders the analytical graph without a renderer switch", async ({ page }) => {
   await page.goto("");
   await expect(page.getByTestId("graph-2d")).toBeVisible();
-  expect(scripts.some((url) => url.includes("Graph3D"))).toBe(false);
-  await page.getByRole("button", { name: "3D" }).click();
-  await expect(page.getByTestId("graph-3d")).toBeVisible();
+  await expect(page.getByRole("group", { name: "Graph view" })).toHaveCount(0);
 });
 
 test("mobile retains search and reader navigation", async ({ page }, testInfo) => {

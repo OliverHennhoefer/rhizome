@@ -10,4 +10,4 @@ depends-on:
 
 # Graph projection
 
-One pure projection controls both the analytical 2D view and exploratory 3D view.
+One pure projection controls the analytical graph view, filtering, and directional focus.
