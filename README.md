@@ -1,52 +1,53 @@
 # Rhizome
 
-Turn an Obsidian-compatible Markdown vault into a graph-native knowledge space. Markdown is the
-source material; the graph is the product.
+**A graph-native knowledge space that lives entirely in GitHub.**
 
-Rhizome compiles links, typed frontmatter relationships, source ranges, backlinks, communities,
-and deterministic coordinates into a static browser application. Notes are fetched only when
-selected. One focused 2D interface handles graph exploration, filtering, and directional analysis.
-Small projections gain a bounded, cooling motion pass after their first static paint; large graphs
-stay deterministic and static until focus or filters make motion sensible.
+Rhizome turns an Obsidian-compatible Markdown repository into an explorable knowledge graph. The
+repository is the system: Markdown is the source, Git is the history, pull requests are the review
+workflow, GitHub Actions is the compiler, and GitHub Pages is the interface. No CMS, database, or
+hosted backend.
 
-## Publish your vault
+```text
+Markdown repository → GitHub Actions → graph-native GitHub Pages site
+```
 
-1. Click **Use this template** on GitHub.
-2. Put Markdown and local images in [`content`](content).
-3. Edit [`rhizome.config.yaml`](rhizome.config.yaml) to declare relationship fields.
-4. Before the first workflow run, select **Settings → Pages → GitHub Actions** once. This creates
-   the Pages site that the deployment workflow reads and updates.
-5. Push to `main` or run **Deploy to GitHub Pages** from the Actions tab.
+## What it does
 
-The workflow discovers the repository base path automatically, builds with Node 24, emits
-`.nojekyll`, and deploys `dist`. Query-based navigation works at both `/` and `/repository/` without
-redirect rules.
+- Compiles wikilinks, Markdown links, tags, aliases, and declared Properties into a typed graph.
+- Makes dependencies, backlinks, missing targets, source evidence, and direction first-class.
+- Answers “what depends on this?” and “what does this depend on?” through bounded focus views.
+- Produces deterministic layouts, with optional cooling motion for small projections.
+- Loads the graph once and fetches note bodies only when selected.
+- Publishes as static assets under both root and repository GitHub Pages paths.
 
-## Authoring contract
+Markdown remains portable and editable in Obsidian, GitHub, or any text editor. Nested folders are
+supported; node IDs preserve their vault-relative paths.
 
-Rhizome supports normal Markdown links and Obsidian wikilinks, aliases, headings, blocks, tags,
-highlights, comments, GFM, callouts, and top-level Properties. Relation fields accept wikilinks,
-internal paths, or HTTP(S) URLs.
+## Publish from GitHub
+
+1. Click **Use this template**.
+2. Add Markdown and local images to [`content/`](content).
+3. Declare relationship fields in [`rhizome.config.yaml`](rhizome.config.yaml).
+4. Select **Settings → Pages → GitHub Actions** once.
+5. Push to `main` or run **Deploy to GitHub Pages**.
+
+Every subsequent content change is checked, compiled, and published by the repository workflows.
+
+## Declare relationships
+
+Only configured top-level Properties become typed edges. Other frontmatter remains metadata.
 
 ```yaml
 ---
 title: Cache invalidation
-aliases:
-  - Caching
-types:
-  - concept
-tags:
-  - architecture
-draft: false
+types: [concept]
+tags: [architecture]
 depends-on:
   - "[[Event model]]"
 supported-by:
   - https://example.com/paper
 ---
 ```
-
-Only fields declared under `relations` become edges. Unknown frontmatter remains metadata. Missing
-links become visible nodes; ambiguous links and case-colliding paths fail the build.
 
 ```yaml
 relations:
@@ -56,20 +57,18 @@ relations:
     color: "#d97757"
 ```
 
-The committed [`rhizome.schema.json`](rhizome.schema.json) is the configuration contract.
+Missing links remain visible. Ambiguous links and case-colliding paths fail the build rather than
+silently connecting the wrong knowledge. Configuration is validated against
+[`rhizome.schema.json`](rhizome.schema.json).
 
-## Local development
+## Develop locally
 
-Node 22 or newer is required.
+Requires Node 22 or newer.
 
 ```sh
 npm install
 npm run dev
 ```
-
-The Vite integration keeps parsed resources in memory. A changed note is reparsed independently;
-production builds always start clean. At 256 notes, parsing switches to batches of 128 across at
-most four worker threads.
 
 ```sh
 npm run check
@@ -77,29 +76,12 @@ npm test
 npm run build
 npx playwright install chromium
 npm run test:e2e
+npm run benchmark
 ```
 
-Run `npm run benchmark` to generate 10,000 notes and 75,000 edges in temporary storage, compile the
-vault, report build time and compressed manifest size, and remove the fixture.
+The compiler follows `discover → parse → filter → resolve → graph → layout → emit`. Production
+builds are clean and deterministic; development reparses changed notes incrementally. The browser
+receives one compact graph manifest and lazy, content-hashed note artifacts—never the Markdown
+parser or layout compiler.
 
-## Architecture
-
-```text
-content/                  Obsidian-compatible source vault
-src/compiler/             discover → parse → filter → resolve → graph → layout → emit
-src/shared/contracts.ts   versioned compiler/browser boundary
-src/app/                  projection, URL state, Sigma, reader, controls
-```
-
-The browser receives `data/graph.json` at startup. Every node points to one content-hashed details
-artifact containing sanitized HTML and exact relationship evidence. Markdown parsing and layout
-compilation never enter the browser bundle. The small `d3-force` motion chunk loads lazily only for
-eligible graphs and explicit motion preferences.
-
-Raw HTML, math, Mermaid, transclusion, non-image media embeds, Canvas, Bases, full-text search,
-editing, authentication, collaboration, and arbitrary graph queries are deliberately outside v1.
-
-## License and ecosystem
-
-Rhizome is MIT licensed. See [`NOTICE.md`](NOTICE.md) for Quartz-community, Quartz, Foam, and Cosma
-attribution and boundaries.
+Rhizome is MIT licensed. See [`NOTICE.md`](NOTICE.md) for ecosystem attribution.
