@@ -48,7 +48,7 @@
 
 .graph-summary {
   position: absolute;
-  right: 14px;
+  left: 14px;
   bottom: 14px;
   z-index: 4;
   display: flex;
@@ -492,6 +492,7 @@
 
 .focus-status {
   left: 14px;
+  bottom: 56px;
 }
 
 .focus-status button {
@@ -561,7 +562,7 @@
 
 @media (max-width: 760px) {
   .graph-summary {
-    right: 10px;
+    left: 10px;
     bottom: 10px;
     max-width: calc(100% - 20px);
     overflow: hidden;
@@ -598,7 +599,7 @@
 
   .focus-status {
     left: 10px;
-    bottom: 10px;
+    bottom: 52px;
   }
 }
 
