@@ -12,7 +12,8 @@ selected. The precise 2D view and optional 3D view use the same graph projection
 1. Click **Use this template** on GitHub.
 2. Put Markdown and local images in [`content`](content).
 3. Edit [`rhizome.config.yaml`](rhizome.config.yaml) to declare relationship fields.
-4. In the new repository, select **Settings → Pages → GitHub Actions** once.
+4. Before the first workflow run, select **Settings → Pages → GitHub Actions** once. This creates
+   the Pages site that the deployment workflow reads and updates.
 5. Push to `main` or run **Deploy to GitHub Pages** from the Actions tab.
 
 The workflow discovers the repository base path automatically, builds with Node 24, emits
