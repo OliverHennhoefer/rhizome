@@ -20,7 +20,7 @@
   "dependencies": {
     "@quartz-community/rehype-obsidian": "^0.1.2",
     "@quartz-community/remark-obsidian": "^0.2.2",
-    "@vitejs/plugin-react": "^5.0.0",
+    "@vitejs/plugin-react": "^6.1.0",
     "ajv": "^8.17.1",
     "graphology": "^0.26.0",
     "graphology-communities-louvain": "^2.0.2",
