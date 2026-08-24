@@ -12,7 +12,7 @@ depends-on:
   - "[[Softmax and logits]]"
   - "[[Parameters]]"
 supported-by:
-  - https://arxiv.org/abs/2101.03961
+  - "[Switch Transformers: Scaling to Trillion Parameter Models with Simple and Efficient Sparsity](https://arxiv.org/abs/2101.03961)"
 ---
 
 # Mixture of experts

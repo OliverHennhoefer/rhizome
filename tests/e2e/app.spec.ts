@@ -380,6 +380,7 @@ test("formats relationships as directional rows with collapsed source evidence",
 
   const external = relationships.locator(".relationship").filter({ hasText: "arxiv.org" });
   await expect(external).toContainText("Supported by");
+  await expect(external).toContainText("Decoupled Weight Decay Regularization");
   await expect(external).toContainText("abs/1711.05101");
   await expect(external.getByText("external", { exact: true })).toBeVisible();
   const evidence = external.getByRole("button", { name: "1 source" });

@@ -235,11 +235,14 @@ function resolveAll(
       if (isExternalRelation(occurrence)) {
         const id = stableId("external", occurrence.target);
         targetId = id;
-        if (!extraNodes.has(id)) {
+        const fallbackTitle = titleForExternal(occurrence.target);
+        const explicitTitle = occurrence.targetTitle?.trim();
+        const existing = extraNodes.get(id);
+        if (!existing) {
           extraNodes.set(id, {
             id,
             kind: "external",
-            title: titleForExternal(occurrence.target),
+            title: explicitTitle || fallbackTitle,
             path: occurrence.target,
             aliases: [],
             types: ["external"],
@@ -250,6 +253,12 @@ function resolveAll(
             community: 0,
             degree: 0,
           });
+        } else if (explicitTitle && existing.title === fallbackTitle) {
+          existing.title = explicitTitle;
+        } else if (explicitTitle && existing.title !== explicitTitle) {
+          throw new Error(
+            `Conflicting titles for external source "${occurrence.target}": "${existing.title}" and "${explicitTitle}"`,
+          );
         }
       } else {
         const resolved = index.resolve(note.id, occurrence);

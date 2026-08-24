@@ -9,6 +9,7 @@ export interface RhizomeConfig {
 
 export interface RawOccurrence {
   target: string;
+  targetTitle?: string;
   anchor?: string;
   origin: "body" | "frontmatter";
   type: string;

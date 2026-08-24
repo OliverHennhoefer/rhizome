@@ -99,6 +99,17 @@ Malformed surrounding Markdown stays readable: $x + y.
     expect(details.html).not.toContain("<script");
   });
 
+  it("uses labels from Markdown-linked external relationship values", async () => {
+    const root = await fixture({
+      "Attention.md": `---\nrelated-to: "[Attention Is All You Need](https://arxiv.org/abs/1706.03762)"\n---\n# Attention\n`,
+    });
+    const manifest = manifestFrom((await new VaultCompiler({ projectRoot: root }).clean()).assets);
+    const source = manifest.nodes.find((node) => node.kind === "external");
+
+    expect(source?.title).toBe("Attention Is All You Need");
+    expect(source?.path).toBe("https://arxiv.org/abs/1706.03762");
+  });
+
   it("treats missing links as nodes and ambiguous links as fatal", async () => {
     const missingRoot = await fixture({ "A.md": "# A\n\n[[Absent]]\n" });
     const missing = manifestFrom(

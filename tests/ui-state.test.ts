@@ -51,7 +51,7 @@ const manifest: GraphManifest = {
     {
       id: "external",
       kind: "external",
-      title: "example.com/library/Source%20Note",
+      title: "Source note",
       path: "https://example.com/library/Source%20Note",
       aliases: [],
       types: ["external"],
@@ -148,6 +148,7 @@ describe("relationship view model", () => {
     expect(views[1].external).toEqual({
       hostname: "example.com",
       path: "library/Source Note",
+      title: "Source note",
       url: "https://example.com/library/Source%20Note",
     });
     expect(views[1].evidence[0].origin).toBe("frontmatter");
@@ -155,5 +156,12 @@ describe("relationship view model", () => {
 
   it("returns no external display for local notes", () => {
     expect(externalDisplay(manifest.nodes[0])).toBeUndefined();
+  });
+
+  it("does not mistake a URL-derived external title for an authored title", () => {
+    const node = manifest.nodes[2];
+    expect(
+      externalDisplay({ ...node, title: "example.com/library/Source%20Note" })?.title,
+    ).toBeUndefined();
   });
 });

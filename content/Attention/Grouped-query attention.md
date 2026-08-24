@@ -14,7 +14,7 @@ depends-on:
   - "[[Queries, keys, and values]]"
   - "[[KV cache]]"
 supported-by:
-  - https://arxiv.org/abs/2305.13245
+  - "[GQA: Training Generalized Multi-Query Transformer Models from Multi-Head Checkpoints](https://arxiv.org/abs/2305.13245)"
 ---
 
 # Grouped-query attention

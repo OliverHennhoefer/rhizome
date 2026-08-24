@@ -11,6 +11,7 @@ export type RelationshipDirection = "incoming" | "outgoing" | "undirected";
 export interface ExternalDisplay {
   hostname: string;
   path?: string;
+  title?: string;
   url: string;
 }
 
@@ -67,7 +68,13 @@ export function externalDisplay(node: GraphNode): ExternalDisplay | undefined {
   try {
     const url = new URL(node.path);
     const path = safeDecode(url.pathname).replace(/^\/+|\/+$/g, "");
-    return { hostname: url.hostname, ...(path ? { path } : {}), url: url.href };
+    const fallbackTitle = `${url.hostname}${url.pathname === "/" ? "" : url.pathname}`;
+    return {
+      hostname: url.hostname,
+      ...(path ? { path } : {}),
+      ...(node.title !== fallbackTitle ? { title: node.title } : {}),
+      url: url.href,
+    };
   } catch {
     return { hostname: node.title, url: node.path };
   }

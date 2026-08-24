@@ -88,12 +88,18 @@ function Relationships({
                     {relationship.label}
                   </span>
                   <strong>
-                    {relationship.external?.hostname ?? relationship.counterpart.title}
+                    {relationship.external?.title ??
+                      relationship.external?.hostname ??
+                      relationship.counterpart.title}
                   </strong>
                   <small>
-                    {relationship.external?.path ??
-                      relationship.counterpart.path ??
-                      relationship.counterpart.kind}
+                    {relationship.external?.title
+                      ? `${relationship.external.hostname}${
+                          relationship.external.path ? `/${relationship.external.path}` : ""
+                        }`
+                      : (relationship.external?.path ??
+                        relationship.counterpart.path ??
+                        relationship.counterpart.kind)}
                   </small>
                 </button>
                 <div className="relationship-actions">

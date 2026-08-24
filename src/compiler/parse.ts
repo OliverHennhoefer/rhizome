@@ -109,6 +109,29 @@ function parseWikilinkTarget(value: string): { target: string; anchor?: string }
   return { target: raw.slice(0, hash), anchor: raw.slice(hash + 1) };
 }
 
+function parseRelationTarget(value: string): {
+  target: string;
+  targetTitle?: string;
+  anchor?: string;
+} {
+  const root = markdownProcessor.parse(value) as Root;
+  const paragraph =
+    root.children.length === 1 && root.children[0]?.type === "paragraph"
+      ? root.children[0]
+      : undefined;
+  const link =
+    paragraph?.children.length === 1 && paragraph.children[0]?.type === "link"
+      ? paragraph.children[0]
+      : undefined;
+  if (link && /^https?:\/\//i.test(link.url)) {
+    const text: string[] = [];
+    visit(link, "text", (node: { value: string }) => text.push(node.value));
+    const targetTitle = text.join("").trim();
+    return { target: link.url, ...(targetTitle ? { targetTitle } : {}) };
+  }
+  return parseWikilinkTarget(value);
+}
+
 export async function parseNote(
   absolutePath: string,
   vaultRoot: string,
@@ -182,10 +205,11 @@ export async function parseNote(
     for (const item of yamlValues(valueNode)) {
       const value = scalarValue(item);
       if (!value) continue;
-      const parsed = parseWikilinkTarget(value);
+      const parsed = parseRelationTarget(value);
       const range = frontmatterRange(item, counter);
       occurrences.push({
         target: parsed.target,
+        targetTitle: parsed.targetTitle,
         anchor: parsed.anchor,
         origin: "frontmatter",
         type: key,
