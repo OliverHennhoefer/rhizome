@@ -1,6 +1,5 @@
 import Sigma from "sigma";
 import {
-  createEdgeArrowProgram,
   EdgeLineProgram,
   type EdgeProgramType,
   type NodeHoverDrawingFunction,
@@ -14,10 +13,10 @@ import {
   type RuntimeGraphEdge,
   reconcileProjectedHover,
 } from "./graph";
-import { type LabelZoomStyle, labelZoomStyleForRatio } from "./graph-labels";
+import { closestNodeAtPoint, type NodeHitArea } from "./graph-hit-testing";
+import { type LabelZoomStyle, labelOpacityForHover, labelZoomStyleForRatio } from "./graph-labels";
 import {
   createDisplayGraph,
-  type GraphForceSettings,
   GraphMotionController,
   GraphPositionStore,
   isMotionEligible,
@@ -26,7 +25,7 @@ import {
   nodeRadius,
   projectionBaseBounds,
 } from "./graph-layout";
-import { blendGraphTone, nodeTone } from "./graph-theme";
+import { blendGraphTone, nodeTone, relationTone } from "./graph-theme";
 
 export interface GraphViewportSnapshot {
   projection: GraphProjection;
@@ -35,7 +34,6 @@ export interface GraphViewportSnapshot {
   motionEnabled: boolean;
   compact: boolean;
   reducedMotion: boolean;
-  forceSettings: GraphForceSettings;
   searchMatches?: ReadonlySet<string>;
   onSelect: (id: string) => void;
   onClearSelection: () => void;
@@ -56,7 +54,6 @@ interface DragState {
 }
 
 const edgePrograms = {
-  arrow: createEdgeArrowProgram<GraphNode, RuntimeGraphEdge>(),
   line: EdgeLineProgram as EdgeProgramType<GraphNode, RuntimeGraphEdge>,
 };
 const OVERVIEW_CAMERA_RATIO = 1.08;
@@ -73,6 +70,8 @@ export class GraphViewportSession {
   private motion?: GraphMotionController;
   private motionFrame?: number;
   private cameraFrame?: number;
+  private hoverFrame?: number;
+  private pendingHoverPoint?: { x: number; y: number };
   private cameraOperation = 0;
   private stageClickTimer?: number;
   private labelZoomStyle: LabelZoomStyle = labelZoomStyleForRatio(OVERVIEW_CAMERA_RATIO);
@@ -117,15 +116,20 @@ export class GraphViewportSession {
     ) => {
       if (!data.label || !this.labelZoomStyle.visible) return;
       const { opacity, size } = this.labelZoomStyle;
+      const key = (data as typeof data & { key?: string }).key;
+      const labelOpacity = key
+        ? labelOpacityForHover(key, opacity, this.hovered, this.hoverNeighbors)
+        : opacity;
+      if (labelOpacity === 0) return;
       const x = data.x + data.size + Math.max(3, size * 0.38);
       context.save();
       context.font = `${settings.labelWeight} ${size}px ${settings.labelFont}`;
       context.textBaseline = "middle";
       context.lineJoin = "round";
-      context.strokeStyle = `rgba(23, 24, 26, ${Math.min(0.94, opacity + 0.18)})`;
+      context.strokeStyle = `rgba(23, 24, 26, ${Math.min(0.94, labelOpacity + 0.18)})`;
       context.lineWidth = Math.max(2, size * 0.3);
       context.strokeText(data.label, x, data.y);
-      context.fillStyle = `rgba(245, 245, 247, ${opacity})`;
+      context.fillStyle = `rgba(245, 245, 247, ${labelOpacity})`;
       context.fillText(data.label, x, data.y);
       context.restore();
     };
@@ -134,8 +138,8 @@ export class GraphViewportSession {
       allowInvalidContainer: false,
       defaultDrawNodeLabel: drawLabel,
       defaultDrawNodeHover: drawHover,
-      defaultNodeColor: "#71849b",
-      defaultEdgeColor: "#73818d",
+      defaultNodeColor: nodeTone(),
+      defaultEdgeColor: relationTone(),
       edgeProgramClasses: edgePrograms,
       hideEdgesOnMove: true,
       hideLabelsOnMove: false,
@@ -175,7 +179,7 @@ export class GraphViewportSession {
     const isSearchMatch = this.searchMatches?.has(node) ?? false;
     const searchRelated = !this.searchMatches || isSearchMatch;
     const hoverRelated = !this.hovered || isHovered || isHoverNeighbor;
-    const color = isSelected ? "#ffffff" : nodeTone(data.kind, Number(data.community ?? 0));
+    const color = isSelected ? "#ffffff" : nodeTone();
     const size = this.nodeSize(node, data);
     return {
       ...data,
@@ -188,7 +192,7 @@ export class GraphViewportSession {
       zIndex:
         isSelected || isHovered ? 4 : isPinned || isSearchMatch ? 3 : isSelectedNeighbor ? 2 : 1,
       forceLabel: true,
-      highlighted: isPinned,
+      highlighted: isPinned || isHovered,
     };
   }
 
@@ -236,19 +240,37 @@ export class GraphViewportSession {
       preventSigmaDefault();
       this.beginDrag(node, event);
     });
+    this.renderer.on("downStage", ({ event, preventSigmaDefault }) => {
+      const node = this.nodeAtPoint(event);
+      if (!node) return;
+      this.cancelStageClick();
+      preventSigmaDefault();
+      this.beginDrag(node, event);
+    });
     this.renderer.on("clickNode", ({ node }) => {
       this.cancelStageClick();
       if (performance.now() >= this.suppressClickUntil) this.snapshot?.onSelect(node);
     });
-    this.renderer.on("clickStage", () => this.scheduleClearSelection());
+    this.renderer.on("clickStage", ({ event }) => {
+      const node = this.nodeAtPoint(event);
+      if (!node) {
+        this.scheduleClearSelection();
+        return;
+      }
+      this.cancelStageClick();
+      if (performance.now() >= this.suppressClickUntil) this.snapshot?.onSelect(node);
+    });
     this.renderer.on("doubleClickStage", () => this.cancelStageClick());
-    this.renderer.on("enterNode", ({ node }) => this.setHover(node));
-    this.renderer.on("leaveNode", ({ node }) => {
-      if (this.hovered === node) this.clearHover();
+    this.renderer.on("leaveStage", () => {
+      this.cancelHoverProbe();
+      this.clearHover();
     });
 
     const mouse = this.renderer.getMouseCaptor();
     const touch = this.renderer.getTouchCaptor();
+    mouse.on("mousemove", (event) => {
+      if (!this.drag) this.scheduleHoverProbe(event);
+    });
     mouse.on("mousemovebody", (event) => this.moveDrag(event));
     mouse.on("mouseup", (event) => this.finishDrag(event.original));
     touch.on("touchmovebody", (event) => {
@@ -262,6 +284,53 @@ export class GraphViewportSession {
       });
     });
     touch.on("touchup", (event) => this.finishDrag(event.original));
+  }
+
+  private nodeHitAreas(): NodeHitArea[] {
+    const nodes: NodeHitArea[] = [];
+    this.displayGraph.forEachNode((id, data) => {
+      const position = this.renderer.graphToViewport(this.positions.getCurrent(id));
+      const searchSize = this.searchMatches?.has(id) ? 1.2 : 0;
+      nodes.push({
+        id,
+        x: position.x,
+        y: position.y,
+        visibleRadius: this.renderer.scaleSize(this.nodeSize(id, data) + searchSize),
+        zIndex:
+          id === this.selected || id === this.hovered
+            ? 4
+            : this.positions.isPinned(id) || this.searchMatches?.has(id)
+              ? 3
+              : this.selectedNeighbors.has(id)
+                ? 2
+                : 1,
+      });
+    });
+    return nodes;
+  }
+
+  private nodeAtPoint(point: { x: number; y: number }): string | undefined {
+    return closestNodeAtPoint(point, this.nodeHitAreas());
+  }
+
+  private scheduleHoverProbe(point: { x: number; y: number }): void {
+    this.pendingHoverPoint = { x: point.x, y: point.y };
+    if (this.hoverFrame !== undefined) return;
+    this.hoverFrame = requestAnimationFrame(() => {
+      this.hoverFrame = undefined;
+      const pending = this.pendingHoverPoint;
+      this.pendingHoverPoint = undefined;
+      if (!pending || this.destroyed || this.drag) return;
+      const node = this.nodeAtPoint(pending);
+      if (node) this.setHover(node);
+      else this.clearHover();
+    });
+  }
+
+  private cancelHoverProbe(): void {
+    if (this.hoverFrame !== undefined) cancelAnimationFrame(this.hoverFrame);
+    this.hoverFrame = undefined;
+    this.pendingHoverPoint = undefined;
   }
 
   private cancelStageClick(): void {
@@ -338,6 +407,7 @@ export class GraphViewportSession {
   }
 
   private setHover(node: string): void {
+    if (this.hovered === node) return;
     this.hovered = node;
     this.hoverNeighbors = neighborsOf(this.displayGraph, node);
     this.writeHoverAttributes();
@@ -345,6 +415,7 @@ export class GraphViewportSession {
   }
 
   private clearHover(): void {
+    if (!this.hovered) return;
     this.hovered = undefined;
     this.hoverNeighbors.clear();
     this.container.removeAttribute("data-hovered-node");
@@ -388,6 +459,7 @@ export class GraphViewportSession {
   private replaceDisplayGraph(projection: GraphProjection): void {
     this.stopMotion();
     this.cancelDrag();
+    this.cancelHoverProbe();
     this.installDisplayGraph(projection);
   }
 
@@ -417,7 +489,6 @@ export class GraphViewportSession {
     const motion = new GraphMotionController({
       graph: this.displayGraph,
       positions: this.positions,
-      forceSettings: snapshot.forceSettings,
       onStatus: (status) => this.emitStatus(status),
       onPinnedChange: () => {
         this.emitPinnedCount();
@@ -533,7 +604,6 @@ export class GraphViewportSession {
       !previous ||
       previous.motionEnabled !== next.motionEnabled ||
       previousEligible !== nextEligible;
-    const forceSettingsChanged = previous?.forceSettings !== next.forceSettings;
 
     this.snapshot = next;
     this.selected = next.selected;
@@ -560,8 +630,6 @@ export class GraphViewportSession {
     if (projectionChanged || motionPolicyChanged) {
       if (!projectionChanged) this.stopMotion();
       this.startMotion();
-    } else if (forceSettingsChanged) {
-      this.motion?.updateForces(next.forceSettings);
     }
 
     if (!projectionChanged && (selectionChanged || focusChanged || searchChanged)) {
@@ -598,6 +666,7 @@ export class GraphViewportSession {
     this.renderer.getCamera().off("updated", this.handleCameraUpdate);
     this.stopMotion();
     this.cancelDrag();
+    this.cancelHoverProbe();
     if (this.cameraFrame !== undefined) cancelAnimationFrame(this.cameraFrame);
     this.cameraFrame = undefined;
     this.cameraOperation += 1;

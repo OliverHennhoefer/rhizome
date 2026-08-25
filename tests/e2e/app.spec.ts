@@ -87,6 +87,20 @@ test("renders the analytical graph without a renderer switch", async ({ page }) 
   await expect(page.getByRole("group", { name: "Graph view" })).toHaveCount(0);
 });
 
+test("opens a random visible note from filters", async ({ page }) => {
+  await page.goto("");
+  await page.getByRole("button", { name: "Filters" }).click();
+
+  const randomNote = page.getByRole("button", { name: "Open a random visible note" });
+  await expect(randomNote).toBeVisible();
+  await expect(randomNote).toContainText("I’m feeling lucky");
+  await randomNote.click();
+
+  await expect(page.getByRole("dialog", { name: "Graph filters" })).toHaveCount(0);
+  await expect(page.getByTestId("reader")).toBeVisible();
+  await expect(page).toHaveURL(/note=/);
+});
+
 test("shows every label uniformly, fades them with distance, then hides them", async ({
   page,
 }, testInfo) => {
@@ -236,7 +250,7 @@ test("recomputes retained hover neighbors after relation filtering", async ({ pa
     .locator("summary")
     .evaluate((element) => (element as unknown as { click(): void }).click());
   await relations
-    .getByRole("checkbox", { name: "link", exact: true })
+    .getByRole("checkbox", { name: "Wiki links", exact: true })
     .evaluate((element) => (element as unknown as { click(): void }).click());
   await expect(graph).toHaveAttribute("data-hovered-node", "Language/Subword tokenization");
   await expect(graph).toHaveAttribute("data-hovered-neighbor-count", "2");
@@ -281,21 +295,18 @@ test("selection-only navigation does not reheat the settled graph", async ({ pag
   await expect(graph).toHaveAttribute("data-pinned-count", "0");
 });
 
-test("relaxes gradually and responds to layout force controls", async ({ page }, testInfo) => {
+test("uses a gradual built-in layout without exposing physics controls", async ({
+  page,
+}, testInfo) => {
   test.skip(testInfo.project.name !== "root", "root desktop project only");
   test.setTimeout(60_000);
   await page.goto("");
   const graph = page.getByTestId("graph-2d");
   await expect(graph).toHaveAttribute("data-layout-status", "running", { timeout: 5_000 });
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
-  await page.getByRole("button", { name: "Layout" }).click();
-  await expect(page.getByRole("dialog", { name: "Graph layout" })).toBeVisible();
-  const repel = page.getByRole("slider", { name: "Repel force" });
-  await expect(repel).toHaveValue("40");
-  await repel.fill("55");
+  await expect(page.getByRole("button", { name: "Layout" })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Graph layout" })).toHaveCount(0);
+  await page.waitForTimeout(1_500);
   await expect(graph).toHaveAttribute("data-layout-status", "running");
-  await page.getByRole("button", { name: "Restore force defaults" }).click();
-  await expect(repel).toHaveValue("40");
   await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
 });
 
@@ -448,7 +459,7 @@ test("keeps oversized projections static without status chrome", async ({ page }
   const graph = page.getByTestId("graph-2d");
   await expect(graph).toHaveAttribute("data-layout-status", "static");
   await expect(page.getByText("Focus or filter to enable motion")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Layout" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Layout" })).toHaveCount(0);
 });
 
 test("toggles directional focus and returns to a filtered fitted overview", async ({
@@ -463,7 +474,7 @@ test("toggles directional focus and returns to a filtered fitted overview", asyn
   await page.getByRole("button", { name: "Filters" }).click();
   const relations = page.locator("details.filter-group").filter({ hasText: "Relations" });
   await relations.locator("summary").click();
-  await relations.getByRole("checkbox", { name: "link", exact: true }).click();
+  await relations.getByRole("checkbox", { name: "Wiki links", exact: true }).click();
   await expect(page).toHaveURL(/relation=link/);
 
   const readerFocus = page.getByTestId("reader").getByRole("region", { name: "Graph focus" });

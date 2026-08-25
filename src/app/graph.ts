@@ -26,9 +26,9 @@ export function createGraph(manifest: GraphManifest): RhizomeGraph {
   for (const edge of manifest.edges) {
     const attributes = {
       ...edge,
-      relationColor: manifest.config.relations[edge.type]?.color ?? relationTone(edge.type),
+      relationColor: relationTone(),
       relationType: edge.type,
-      type: edge.directed ? "arrow" : "line",
+      type: "line",
     };
     if (edge.directed) graph.addDirectedEdgeWithKey(edge.id, edge.source, edge.target, attributes);
     else graph.addUndirectedEdgeWithKey(edge.id, edge.source, edge.target, attributes);

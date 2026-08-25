@@ -41,3 +41,13 @@ export function labelZoomStyleForRatio(ratio: number): LabelZoomStyle {
     opacity: round(opacity),
   };
 }
+
+export function labelOpacityForHover(
+  node: string,
+  opacity: number,
+  hovered: string | undefined,
+  hoverNeighbors: ReadonlySet<string>,
+): number {
+  if (!hovered || node === hovered || hoverNeighbors.has(node)) return opacity;
+  return 0;
+}

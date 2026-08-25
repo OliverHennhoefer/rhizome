@@ -32,6 +32,10 @@
   cursor: grab;
 }
 
+.graph-canvas[data-hovered-node] canvas {
+  cursor: pointer;
+}
+
 .graph-canvas:active canvas {
   cursor: grabbing;
 }
@@ -339,54 +343,31 @@
   background: var(--surface-hover);
 }
 
-.force-controls {
+.random-note-action {
+  width: calc(100% - 16px);
+  margin: 0 8px 10px;
+}
+
+.random-note-action > span {
   display: grid;
-  gap: 14px;
-  padding: 12px 10px 14px;
-  border-top: 1px solid var(--line);
+  gap: 2px;
 }
 
-.force-control {
-  display: grid;
-  gap: 8px;
-  color: var(--secondary);
-  font-size: 10px;
+.random-note-action strong {
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 500;
 }
 
-.force-control > span,
-.layout-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.force-control output,
-.layout-meta {
+.random-note-action small {
   color: var(--muted);
   font-size: 9px;
 }
 
-.force-control input {
-  width: 100%;
-  accent-color: var(--text);
-}
-
-.layout-meta {
-  justify-content: flex-end;
-  padding: 10px;
-  border-top: 1px solid var(--line);
-}
-
-.layout-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-
-.layout-actions .popover-action {
-  justify-content: center;
-  margin-top: 0;
-  text-align: center;
+.random-note-action i {
+  color: var(--muted);
+  font-size: 14px;
+  font-style: normal;
 }
 
 .filter-group {
@@ -445,26 +426,6 @@
 
 .filter-options input {
   accent-color: var(--text);
-}
-
-.relation-legend {
-  display: grid;
-  gap: 8px;
-  padding: 12px 8px;
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 9px;
-}
-
-.relation-legend span {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
-.relation-legend i {
-  width: 18px;
-  height: 1px;
 }
 
 .popover-action {

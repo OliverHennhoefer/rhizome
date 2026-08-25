@@ -1,12 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { GraphManifest, GraphNode } from "../shared/contracts";
 import { GraphControls } from "./GraphControls";
 import type { GraphProjection, RhizomeGraph } from "./graph";
-import {
-  DEFAULT_GRAPH_FORCE_SETTINGS,
-  type GraphForceSettings,
-  type LayoutStatus,
-} from "./graph-layout";
+import type { LayoutStatus } from "./graph-layout";
 import { GraphViewportSession } from "./graph-viewport";
 
 type FilterKey = "types" | "tags" | "relations";
@@ -77,18 +73,7 @@ export function Graph2D({
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const [status, setStatus] = useState<LayoutStatus>("paused");
   const [pinnedCount, setPinnedCount] = useState(0);
-  const [forceSettings, setForceSettings] = useState<GraphForceSettings>(() => ({
-    ...DEFAULT_GRAPH_FORCE_SETTINGS,
-  }));
   const motionEnabled = !reducedMotion;
-  const handleForceChange = useCallback((key: keyof GraphForceSettings, value: number) => {
-    setForceSettings((current) => ({ ...current, [key]: value }));
-  }, []);
-  const handleRestoreForceDefaults = useCallback(
-    () => setForceSettings({ ...DEFAULT_GRAPH_FORCE_SETTINGS }),
-    [],
-  );
-  const handleResetLayout = useCallback(() => session.current?.resetLayout(), []);
 
   useEffect(() => {
     if (!container.current) return;
@@ -117,7 +102,6 @@ export function Graph2D({
       motionEnabled,
       compact,
       reducedMotion,
-      forceSettings,
       searchMatches,
       onSelect,
       onClearSelection,
@@ -128,7 +112,6 @@ export function Graph2D({
     }
   }, [
     compact,
-    forceSettings,
     focus,
     motionEnabled,
     onClearSelection,
@@ -153,26 +136,20 @@ export function Graph2D({
         depth={depth}
         direction={direction}
         filters={filters}
-        forceSettings={forceSettings}
         focus={focus}
         manifest={manifest}
         onClearFilters={onClearFilters}
         onClearFocus={onClearFocus}
-        onForceChange={handleForceChange}
         onOverview={onOverview}
-        onResetLayout={handleResetLayout}
-        onRestoreForceDefaults={handleRestoreForceDefaults}
         onToggleFilter={onToggleFilter}
         onToggleReader={onToggleReader}
         projection={projection}
-        pinnedCount={pinnedCount}
         readerOpen={readerOpen}
         search={search}
         searchResults={searchResults}
         selected={selected}
         onSearchChange={onSearchChange}
         onSelect={onSelect}
-        motionAvailable={motionEnabled}
       />
     </>
   );

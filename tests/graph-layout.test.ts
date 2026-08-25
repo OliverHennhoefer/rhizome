@@ -1,22 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { createGraph, type GraphProjection, type RhizomeGraph } from "../src/app/graph";
-import { labelZoomStyleForRatio } from "../src/app/graph-labels";
+import { labelOpacityForHover, labelZoomStyleForRatio } from "../src/app/graph-labels";
 import {
   buildPhysicalLinks,
   clampPositionToRadius,
   createDisplayGraph,
-  DEFAULT_GRAPH_FORCE_SETTINGS,
   FORCE_SETTINGS,
   GraphMotionController,
   GraphPositionStore,
-  graphForceParameters,
   isMotionEligible,
   nodeRadius,
   ProjectionInvariantError,
   physicalLinkStrength,
   projectionBaseBounds,
 } from "../src/app/graph-layout";
-import { blendGraphTone, nodeTone } from "../src/app/graph-theme";
+import { blendGraphTone, nodeTone, relationTone } from "../src/app/graph-theme";
 import type { GraphManifest } from "../src/shared/contracts";
 
 const manifest: GraphManifest = {
@@ -111,7 +109,7 @@ describe("display graph", () => {
     expect(changed.getNodeAttributes("a")).toMatchObject({ x: 42, y: 24 });
   });
 
-  it("preserves mixed edge direction, parallel edges, and self-loops", () => {
+  it("preserves edge direction as data while rendering every relation as a line", () => {
     const source = createGraph(manifest);
     const display = createDisplayGraph(
       source,
@@ -122,6 +120,7 @@ describe("display graph", () => {
     expect(display.isDirected("ab-link")).toBe(true);
     expect(display.isDirected("ab-relation")).toBe(true);
     expect(display.isUndirected("bc")).toBe(true);
+    expect(display.everyEdge((_, attributes) => attributes.type === "line")).toBe(true);
     expect(display.selfLoopCount).toBe(1);
   });
 
@@ -164,10 +163,10 @@ describe("display graph", () => {
     expect(physicalLinkStrength(1_000_000)).toBe(0.16);
   });
 
-  it("carries configured relation colors into the runtime graph", () => {
+  it("uses one neutral connector tone for every relation", () => {
     const graph = createGraph(manifest);
-    expect(graph.getEdgeAttribute("ab-relation", "relationColor")).toBe("#d97757");
-    expect(graph.getEdgeAttribute("ab-link", "relationColor")).toBe("#73818d");
+    expect(graph.getEdgeAttribute("ab-relation", "relationColor")).toBe(relationTone());
+    expect(graph.getEdgeAttribute("ab-link", "relationColor")).toBe(relationTone());
   });
 });
 
@@ -175,12 +174,12 @@ describe("motion policy and position state", () => {
   it("gives connected hubs a pronounced but bounded size advantage", () => {
     const radius = (degree: number) => nodeRadius({ ...manifest.nodes[0], degree });
 
-    expect(radius(0)).toBeCloseTo(3.25);
+    expect(radius(0)).toBeCloseTo(3.75);
     expect(radius(1)).toBeCloseTo(4.4);
     expect(radius(4)).toBeLessThan(radius(16));
-    expect(radius(25) - radius(1)).toBeGreaterThan(4);
-    expect(radius(100)).toBe(10.5);
-    expect(radius(10_000)).toBe(10.5);
+    expect(radius(16) - radius(6)).toBeGreaterThan(6);
+    expect(radius(25)).toBe(16);
+    expect(radius(10_000)).toBe(16);
   });
 
   it("derives stable padded normalization bounds from compiler positions", () => {
@@ -189,7 +188,7 @@ describe("motion policy and position state", () => {
     positions.setCurrent("a", { x: -10_000, y: 10_000 });
 
     expect(projectionBaseBounds(projection(["a", "b"], ["ab-link"]), positions)).toEqual({
-      x: [-10, 210],
+      x: [-100, 300],
       y: [-1, 1],
     });
     expect(projectionBaseBounds(projection([], []), positions)).toEqual({
@@ -209,22 +208,12 @@ describe("motion policy and position state", () => {
     });
   });
 
-  it("maps Obsidian-style force controls to bounded simulation parameters", () => {
-    const defaults = graphForceParameters(DEFAULT_GRAPH_FORCE_SETTINGS);
-    expect(defaults.centerStrength).toBeCloseTo(0.006);
-    expect(defaults.chargeStrength).toBe(-32);
-    expect(defaults.linkStrengthScale).toBe(1);
-    expect(defaults.linkDistance).toBe(42);
-
-    const bounded = graphForceParameters({
-      centerForce: 500,
-      repelForce: -10,
-      linkForce: Number.NaN,
-      linkDistance: 200,
-    });
-    expect(Math.abs(bounded.chargeStrength)).toBe(0);
-    expect(bounded.linkStrengthScale).toBe(1);
-    expect(bounded.linkDistance).toBe(100);
+  it("uses a strong-link, slow-cooling motion profile", () => {
+    expect(FORCE_SETTINGS.linkStrengthScale).toBeGreaterThan(2);
+    expect(FORCE_SETTINGS.alphaDecay).toBeLessThan(0.02);
+    expect(FORCE_SETTINGS.velocityDecay).toBeLessThan(0.3);
+    expect(FORCE_SETTINGS.anchorStrength).toBeLessThan(0.01);
+    expect(FORCE_SETTINGS.maxAutomaticDisplacement).toBeGreaterThan(50);
   });
 
   it("applies desktop and compact thresholds", () => {
@@ -274,7 +263,6 @@ describe("motion policy and position state", () => {
       const controller = new GraphMotionController({
         graph: display,
         positions,
-        forceSettings: DEFAULT_GRAPH_FORCE_SETTINGS,
         onStatus: () => undefined,
         onPinnedChange: () => undefined,
       });
@@ -300,7 +288,6 @@ describe("motion policy and position state", () => {
     const controller = new GraphMotionController({
       graph: display,
       positions,
-      forceSettings: DEFAULT_GRAPH_FORCE_SETTINGS,
       onStatus: () => undefined,
       onPinnedChange: () => undefined,
     });
@@ -330,7 +317,6 @@ describe("motion policy and position state", () => {
     const controller = new GraphMotionController({
       graph: display,
       positions,
-      forceSettings: DEFAULT_GRAPH_FORCE_SETTINGS,
       onStatus: () => undefined,
       onPinnedChange: () => undefined,
     });
@@ -359,7 +345,6 @@ describe("motion policy and position state", () => {
     const controller = new GraphMotionController({
       graph: display,
       positions,
-      forceSettings: DEFAULT_GRAPH_FORCE_SETTINGS,
       onStatus: () => undefined,
       onPinnedChange: () => undefined,
     });
@@ -388,7 +373,6 @@ describe("motion policy and position state", () => {
     const controller = new GraphMotionController({
       graph: display,
       positions,
-      forceSettings: DEFAULT_GRAPH_FORCE_SETTINGS,
       onStatus: () => undefined,
       onPinnedChange: () => undefined,
     });
@@ -418,7 +402,6 @@ describe("motion policy and position state", () => {
     const controller = new GraphMotionController({
       graph: display,
       positions,
-      forceSettings: DEFAULT_GRAPH_FORCE_SETTINGS,
       onStatus: () => undefined,
       onPinnedChange: () => undefined,
     });
@@ -445,12 +428,21 @@ describe("label policy", () => {
     expect(labelZoomStyleForRatio(3)).toEqual({ visible: false, size: 6.928, opacity: 0 });
     expect(labelZoomStyleForRatio(4)).toEqual({ visible: false, size: 6.5, opacity: 0 });
   });
+
+  it("keeps hovered and connected labels while making unrelated labels transparent", () => {
+    const neighbors = new Set(["neighbor"]);
+
+    expect(labelOpacityForHover("hovered", 0.8, "hovered", neighbors)).toBe(0.8);
+    expect(labelOpacityForHover("neighbor", 0.8, "hovered", neighbors)).toBe(0.8);
+    expect(labelOpacityForHover("unrelated", 0.8, "hovered", neighbors)).toBe(0);
+    expect(labelOpacityForHover("unrelated", 0.8, undefined, neighbors)).toBe(0.8);
+  });
 });
 
 describe("graph color policy", () => {
-  it("uses muted community hues and blends inactive relations into the graph stage", () => {
-    expect(nodeTone("note", 0)).toBe("#71849b");
-    expect(nodeTone("missing", 0)).toBe("#a18463");
+  it("uses neutral node and connector tones with subdued inactive edges", () => {
+    expect(nodeTone()).toBe("#b8bcc2");
+    expect(relationTone()).toBe("#8c9197");
     expect(blendGraphTone("#d97757", 0)).toBe("#17181a");
     expect(blendGraphTone("#d97757", 1)).toBe("#d97757");
   });

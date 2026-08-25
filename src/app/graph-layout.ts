@@ -1,7 +1,5 @@
 import type {
-  ForceCenter,
   ForceLink,
-  ForceManyBody,
   ForceX,
   ForceY,
   Simulation,
@@ -32,40 +30,29 @@ export const DESKTOP_MOTION_LIMITS: MotionLimits = { nodes: 600, edges: 4_000 };
 export const COMPACT_MOTION_LIMITS: MotionLimits = { nodes: 200, edges: 1_000 };
 
 export const FORCE_SETTINGS = {
-  anchorStrength: 0.025,
-  initialAlpha: 0.48,
-  alphaDecay: 0.022,
-  alphaMin: 0.01,
-  collisionIterations: 1,
-  controlAlpha: 0.22,
-  dragAlpha: 0.42,
+  anchorStrength: 0.004,
+  centerStrength: 0.01,
+  chargeStrength: -48,
+  linkDistance: 38,
+  linkStrengthScale: 3,
+  initialAlpha: 0.72,
+  alphaDecay: 0.014,
+  alphaMin: 0.006,
+  collisionIterations: 2,
+  dragAlpha: 0.48,
   dragAlphaTarget: 0.18,
-  dragLinkBoost: 2.2,
-  interactiveVelocityDecay: 0.24,
-  interactiveAnchorStrength: 0.006,
+  dragLinkBoost: 1.5,
+  interactiveVelocityDecay: 0.2,
+  interactiveAnchorStrength: 0.0015,
   interactiveMaxDisplacement: 96,
-  maxAutomaticDisplacement: 30,
+  maxAutomaticDisplacement: 72,
   maxReleaseVelocity: 6,
-  releaseAlpha: 0.54,
-  releaseLinkBoost: 3.2,
+  releaseAlpha: 0.6,
+  releaseLinkBoost: 2,
   releaseLinkBoostUntilAlpha: 0.14,
-  releaseVelocityScale: 0.5,
-  velocityDecay: 0.34,
+  releaseVelocityScale: 0.85,
+  velocityDecay: 0.28,
 } as const;
-
-export interface GraphForceSettings {
-  centerForce: number;
-  repelForce: number;
-  linkForce: number;
-  linkDistance: number;
-}
-
-export const DEFAULT_GRAPH_FORCE_SETTINGS: GraphForceSettings = {
-  centerForce: 20,
-  repelForce: 40,
-  linkForce: 50,
-  linkDistance: 42,
-};
 
 export interface PhysicalLink {
   source: string;
@@ -99,7 +86,6 @@ interface DragKinematics {
 interface MotionControllerOptions {
   graph: RhizomeGraph;
   positions: GraphPositionStore;
-  forceSettings?: GraphForceSettings;
   onStatus: (status: LayoutStatus) => void;
   onPinnedChange: () => void;
 }
@@ -215,7 +201,7 @@ export function projectionBaseBounds(
     maxY = Math.max(maxY, y);
   }
   const pad = (minimum: number, maximum: number): [number, number] => {
-    const padding = Math.max(1, (maximum - minimum) * 0.05);
+    const padding = Math.max(1, (maximum - minimum) * 0.5);
     return [minimum - padding, maximum + padding];
   };
   return { x: pad(minX, maxX), y: pad(minY, maxY) };
@@ -301,32 +287,6 @@ export function physicalLinkStrength(occurrences: number): number {
   return Math.min(0.16, 0.055 + Math.log1p(Math.max(1, occurrences)) * 0.02);
 }
 
-function forceValue(value: number, fallback: number, minimum: number, maximum: number): number {
-  return Math.min(maximum, Math.max(minimum, Number.isFinite(value) ? value : fallback));
-}
-
-export function graphForceParameters(settings: GraphForceSettings): {
-  centerStrength: number;
-  chargeStrength: number;
-  linkStrengthScale: number;
-  linkDistance: number;
-} {
-  return {
-    centerStrength:
-      forceValue(settings.centerForce, DEFAULT_GRAPH_FORCE_SETTINGS.centerForce, 0, 100) * 0.0003,
-    chargeStrength:
-      forceValue(settings.repelForce, DEFAULT_GRAPH_FORCE_SETTINGS.repelForce, 0, 100) * -0.8,
-    linkStrengthScale:
-      forceValue(settings.linkForce, DEFAULT_GRAPH_FORCE_SETTINGS.linkForce, 0, 100) / 50,
-    linkDistance: forceValue(
-      settings.linkDistance,
-      DEFAULT_GRAPH_FORCE_SETTINGS.linkDistance,
-      20,
-      100,
-    ),
-  };
-}
-
 function seededRandom(seed: string): () => number {
   let value = 2166136261;
   for (let index = 0; index < seed.length; index += 1) {
@@ -349,11 +309,8 @@ export class GraphMotionController {
   private readonly onPinnedChange: () => void;
   private simulation?: Simulation<LayoutNode, LayoutLink>;
   private linkForce?: ForceLink<LayoutNode, LayoutLink>;
-  private chargeForce?: ForceManyBody<LayoutNode>;
-  private centerForce?: ForceCenter<LayoutNode>;
   private anchorXForce?: ForceX<LayoutNode>;
   private anchorYForce?: ForceY<LayoutNode>;
-  private forceSettings: GraphForceSettings;
   private nodes = new Map<string, LayoutNode>();
   private activeDrag?: string;
   private releaseNode?: string;
@@ -365,7 +322,6 @@ export class GraphMotionController {
   constructor(options: MotionControllerOptions) {
     this.graph = options.graph;
     this.positions = options.positions;
-    this.forceSettings = { ...(options.forceSettings ?? DEFAULT_GRAPH_FORCE_SETTINGS) };
     this.onStatus = options.onStatus;
     this.onPinnedChange = options.onPinnedChange;
   }
@@ -400,14 +356,13 @@ export class GraphMotionController {
       this.nodes.set(id, node);
     });
     const links: LayoutLink[] = buildPhysicalLinks(this.graph).map((link) => ({ ...link }));
-    const parameters = graphForceParameters(this.forceSettings);
     this.linkForce = d3
       .forceLink<LayoutNode, LayoutLink>(links)
       .id((node) => node.id)
-      .distance(parameters.linkDistance)
-      .strength((link) => physicalLinkStrength(link.occurrences) * parameters.linkStrengthScale);
-    this.chargeForce = d3.forceManyBody<LayoutNode>().strength(parameters.chargeStrength);
-    this.centerForce = d3.forceCenter<LayoutNode>(0, 0).strength(parameters.centerStrength);
+      .distance(FORCE_SETTINGS.linkDistance)
+      .strength(
+        (link) => physicalLinkStrength(link.occurrences) * FORCE_SETTINGS.linkStrengthScale,
+      );
     this.anchorXForce = d3
       .forceX<LayoutNode>((node) => node.baseX)
       .strength(FORCE_SETTINGS.anchorStrength);
@@ -434,8 +389,8 @@ export class GraphMotionController {
       .alphaMin(FORCE_SETTINGS.alphaMin)
       .velocityDecay(FORCE_SETTINGS.velocityDecay)
       .force("link", this.linkForce)
-      .force("charge", this.chargeForce)
-      .force("center", this.centerForce)
+      .force("charge", d3.forceManyBody<LayoutNode>().strength(FORCE_SETTINGS.chargeStrength))
+      .force("center", d3.forceCenter<LayoutNode>(0, 0).strength(FORCE_SETTINGS.centerStrength))
       .force("anchor-x", this.anchorXForce)
       .force("anchor-y", this.anchorYForce)
       .force("collide", collisionForce)
@@ -489,7 +444,6 @@ export class GraphMotionController {
   }
 
   private applyLinkStrength(): void {
-    const parameters = graphForceParameters(this.forceSettings);
     const activeDrag = this.activeDrag;
     const releaseNode = this.releaseNode;
     this.linkForce?.strength((link) => {
@@ -502,7 +456,7 @@ export class GraphMotionController {
         : incidentToRelease
           ? FORCE_SETTINGS.releaseLinkBoost
           : 1;
-      return physicalLinkStrength(link.occurrences) * parameters.linkStrengthScale * boost;
+      return physicalLinkStrength(link.occurrences) * FORCE_SETTINGS.linkStrengthScale * boost;
     });
   }
 
@@ -639,21 +593,6 @@ export class GraphMotionController {
     }
   }
 
-  updateForces(settings: GraphForceSettings): void {
-    this.forceSettings = { ...settings };
-    const parameters = graphForceParameters(this.forceSettings);
-    this.linkForce?.distance(parameters.linkDistance);
-    this.applyLinkStrength();
-    this.chargeForce?.strength(parameters.chargeStrength);
-    this.centerForce?.strength(parameters.centerStrength);
-    if (this.simulation) {
-      this.simulation
-        .alpha(Math.max(this.simulation.alpha(), FORCE_SETTINGS.controlAlpha))
-        .restart();
-      this.onStatus("running");
-    }
-  }
-
   pause(): void {
     this.simulation?.stop();
     if (!this.killed) this.onStatus("paused");
@@ -670,8 +609,6 @@ export class GraphMotionController {
     this.simulation?.stop();
     this.simulation = undefined;
     this.linkForce = undefined;
-    this.chargeForce = undefined;
-    this.centerForce = undefined;
     this.anchorXForce = undefined;
     this.anchorYForce = undefined;
     this.dragKinematics = undefined;
@@ -687,5 +624,5 @@ export function nodeColorWithAlpha(color: string, alpha: string): string {
 
 export function nodeRadius(node: GraphNode): number {
   const degree = Math.max(0, Number(node.degree) || 0);
-  return Math.min(10.5, 3.25 + Math.sqrt(degree) * 1.15);
+  return Math.min(16, 3.75 + degree * 0.65);
 }

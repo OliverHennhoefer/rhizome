@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GraphManifest, GraphNode } from "../shared/contracts";
 import type { GraphProjection } from "./graph";
-import { DEFAULT_GRAPH_FORCE_SETTINGS, type GraphForceSettings } from "./graph-layout";
-import { relationTone } from "./graph-theme";
+import { pickRandomNoteId } from "./random-note";
 
 type FilterKey = "types" | "tags" | "relations";
-type PopoverName = "filters" | "layout";
+type PopoverName = "filters";
 
 interface Props {
   manifest: GraphManifest;
@@ -18,13 +17,7 @@ interface Props {
   readerOpen: boolean;
   search: string;
   searchResults: GraphNode[];
-  forceSettings: GraphForceSettings;
-  pinnedCount: number;
-  motionAvailable: boolean;
   onOverview: () => void;
-  onForceChange: (key: keyof GraphForceSettings, value: number) => void;
-  onRestoreForceDefaults: () => void;
-  onResetLayout: () => void;
   onClearFocus: () => void;
   onSearchChange: (value: string) => void;
   onSelect: (id: string) => void;
@@ -33,11 +26,10 @@ interface Props {
   onToggleReader: () => void;
 }
 
-function Icon({ name }: { name: "overview" | "filter" | "layout" | "reader" }) {
+function Icon({ name }: { name: "overview" | "filter" | "reader" }) {
   const paths = {
     overview: <path d="M6 3H3v3M12 3h3v3M6 15H3v-3m9 3h3v-3" />,
     filter: <path d="M3 5h12M5.5 9h7M8 13h2" />,
-    layout: <path d="M3 5h4m3 0h5M7 3v4M3 9h8m3 0h1m-4-2v4M3 13h2m3 0h7M5 11v4" />,
     reader: <path d="M3 3.5h12v11H3zM10.5 3.5v11" />,
   } as const;
   return (
@@ -49,46 +41,17 @@ function Icon({ name }: { name: "overview" | "filter" | "layout" | "reader" }) {
   );
 }
 
-function ForceControl({
-  label,
-  value,
-  minimum = 0,
-  maximum = 100,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  minimum?: number;
-  maximum?: number;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <label className="force-control">
-      <span>
-        {label}
-        <output>{value}</output>
-      </span>
-      <input
-        aria-label={label}
-        max={maximum}
-        min={minimum}
-        onChange={(event) => onChange(Number(event.target.value))}
-        type="range"
-        value={value}
-      />
-    </label>
-  );
-}
-
 function ToggleGroup({
   title,
   values,
   active,
+  labelForValue,
   onToggle,
 }: {
   title: string;
   values: string[];
   active: Set<string>;
+  labelForValue?: (value: string) => string;
   onToggle: (value: string) => void;
 }) {
   if (values.length === 0) return null;
@@ -102,7 +65,7 @@ function ToggleGroup({
         {values.map((value) => (
           <label key={value}>
             <input type="checkbox" checked={active.has(value)} onChange={() => onToggle(value)} />
-            <span>{value}</span>
+            <span>{labelForValue?.(value) ?? value}</span>
           </label>
         ))}
       </div>
@@ -121,13 +84,7 @@ export function GraphControls({
   readerOpen,
   search,
   searchResults,
-  forceSettings,
-  pinnedCount,
-  motionAvailable,
   onOverview,
-  onForceChange,
-  onRestoreForceDefaults,
-  onResetLayout,
   onClearFocus,
   onSearchChange,
   onSelect,
@@ -146,9 +103,18 @@ export function GraphControls({
   );
   const relationNames = Object.keys(manifest.facets.relations).sort();
   const activeCount = activeFilters.length + (search.trim() ? 1 : 0);
-  const forcesAreDefault = Object.entries(DEFAULT_GRAPH_FORCE_SETTINGS).every(
-    ([key, value]) => forceSettings[key as keyof GraphForceSettings] === value,
+  const visibleNoteCount = useMemo(
+    () =>
+      manifest.nodes.filter((node) => node.kind === "note" && projection.nodes.has(node.id)).length,
+    [manifest.nodes, projection.nodes],
   );
+
+  const openRandomNote = () => {
+    const id = pickRandomNoteId(manifest.nodes, projection.nodes, selected);
+    if (!id) return;
+    setOpen(undefined);
+    onSelect(id);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -230,19 +196,6 @@ export function GraphControls({
             <span className="control-label">Filters</span>
             {activeCount > 0 && <small>{activeCount}</small>}
           </button>
-          {motionAvailable && (
-            <button
-              aria-label="Layout"
-              aria-controls="layout-popover"
-              aria-expanded={open === "layout"}
-              data-popover-trigger="layout"
-              onClick={() => togglePopover("layout")}
-              type="button"
-            >
-              <Icon name="layout" />
-              <span className="control-label">Layout</span>
-            </button>
-          )}
           <button
             aria-label={readerOpen ? "Hide reader" : "Show reader"}
             aria-pressed={readerOpen}
@@ -284,6 +237,19 @@ export function GraphControls({
                 </button>
               )}
             </div>
+            <button
+              aria-label="Open a random visible note"
+              className="popover-action random-note-action"
+              disabled={visibleNoteCount === 0}
+              onClick={openRandomNote}
+              type="button"
+            >
+              <span>
+                <strong>Random note</strong>
+                <small>I’m feeling lucky · {visibleNoteCount} visible</small>
+              </span>
+              <i aria-hidden="true">↗</i>
+            </button>
             {search.trim() && (
               <section aria-label="Search results" className="filter-search-results">
                 {searchResults.length > 0 ? (
@@ -319,25 +285,15 @@ export function GraphControls({
             />
             <ToggleGroup
               active={filters.relations}
+              labelForValue={(relation) =>
+                relation === "link"
+                  ? "Wiki links"
+                  : (manifest.config.relations[relation]?.label ?? relation)
+              }
               onToggle={(value) => onToggleFilter("relations", value)}
               title="Relations"
               values={relationNames}
             />
-            {relationNames.length > 0 && (
-              <div className="relation-legend">
-                {relationNames.map((relation) => (
-                  <span key={relation}>
-                    <i
-                      style={{
-                        background:
-                          manifest.config.relations[relation]?.color ?? relationTone(relation),
-                      }}
-                    />
-                    {manifest.config.relations[relation]?.label ?? relation}
-                  </span>
-                ))}
-              </div>
-            )}
             <button
               className="popover-action"
               disabled={!activeCount}
@@ -346,65 +302,6 @@ export function GraphControls({
             >
               Clear filters
             </button>
-          </section>
-        )}
-
-        {open === "layout" && motionAvailable && (
-          <section
-            aria-label="Graph layout"
-            className="control-popover"
-            id="layout-popover"
-            role="dialog"
-          >
-            <header>
-              <div>
-                <p className="eyebrow">Physics</p>
-                <h2>Layout</h2>
-              </div>
-              <button aria-label="Close layout" onClick={() => setOpen(undefined)} type="button">
-                ×
-              </button>
-            </header>
-            <div className="force-controls">
-              <ForceControl
-                label="Center force"
-                onChange={(value) => onForceChange("centerForce", value)}
-                value={forceSettings.centerForce}
-              />
-              <ForceControl
-                label="Repel force"
-                onChange={(value) => onForceChange("repelForce", value)}
-                value={forceSettings.repelForce}
-              />
-              <ForceControl
-                label="Link force"
-                onChange={(value) => onForceChange("linkForce", value)}
-                value={forceSettings.linkForce}
-              />
-              <ForceControl
-                label="Link distance"
-                maximum={100}
-                minimum={20}
-                onChange={(value) => onForceChange("linkDistance", value)}
-                value={forceSettings.linkDistance}
-              />
-            </div>
-            <div className="layout-meta">
-              <span>{pinnedCount} pinned</span>
-            </div>
-            <div className="layout-actions">
-              <button
-                className="popover-action"
-                disabled={forcesAreDefault}
-                onClick={onRestoreForceDefaults}
-                type="button"
-              >
-                Restore force defaults
-              </button>
-              <button className="popover-action" onClick={onResetLayout} type="button">
-                Reset layout
-              </button>
-            </div>
           </section>
         )}
       </div>

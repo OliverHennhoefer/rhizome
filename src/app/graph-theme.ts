@@ -1,19 +1,5 @@
-import type { NodeKind } from "../shared/contracts";
-
-export const COMMUNITY_TONES = [
-  "#71849b",
-  "#748b7a",
-  "#668c91",
-  "#88758f",
-  "#9a7464",
-  "#9a855d",
-  "#92737c",
-  "#737d9d",
-] as const;
-
-const RELATION_TONES = ["#8a7a9b", "#5f8990", "#9a7567", "#7f8f68", "#8d7180"] as const;
-
-export const LINK_TONE = "#73818d";
+export const NODE_TONE = "#b8bcc2";
+export const EDGE_TONE = "#8c9197";
 const GRAPH_STAGE_TONE = "#17181a";
 
 export function blendGraphTone(color: string, amount: number): string {
@@ -29,17 +15,10 @@ export function blendGraphTone(color: string, amount: number): string {
   return `#${mixed.join("")}`;
 }
 
-export function nodeTone(kind: NodeKind, community: number): string {
-  if (kind === "missing") return "#a18463";
-  if (kind === "external") return "#668892";
-  return COMMUNITY_TONES[Math.abs(community) % COMMUNITY_TONES.length];
+export function nodeTone(): string {
+  return NODE_TONE;
 }
 
-export function relationTone(relation: string): string {
-  if (relation === "link") return LINK_TONE;
-  let hash = 0;
-  for (let index = 0; index < relation.length; index += 1) {
-    hash = Math.imul(hash ^ relation.charCodeAt(index), 16777619);
-  }
-  return RELATION_TONES[Math.abs(hash) % RELATION_TONES.length];
+export function relationTone(): string {
+  return EDGE_TONE;
 }
