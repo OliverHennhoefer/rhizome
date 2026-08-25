@@ -753,6 +753,7 @@ describe("label policy", () => {
   });
 
   it("eases unrelated labels out quickly without snapping", () => {
+    expect(HOVER_TRANSITION_DURATION_MS).toBe(210);
     expect(hoverTransitionProgress(0)).toBe(0);
     expect(hoverTransitionProgress(HOVER_TRANSITION_DURATION_MS / 2)).toBe(0.875);
     expect(hoverTransitionProgress(HOVER_TRANSITION_DURATION_MS)).toBe(1);
