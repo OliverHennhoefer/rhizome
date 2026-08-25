@@ -20,6 +20,10 @@ export function blendGraphTone(color: string, amount: number): string {
   return blendHexTone(GRAPH_STAGE_TONE, color, amount);
 }
 
+export function emphasizeNodeTone(color: string, amount: number): string {
+  return blendHexTone(color, "#ffffff", amount);
+}
+
 export function backTraceNodeTone(visits: number): string {
   const count = Number.isFinite(visits) ? Math.max(0, Math.floor(visits)) : 0;
   if (count === 0) return NODE_TONE;

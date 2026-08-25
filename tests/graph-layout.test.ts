@@ -25,7 +25,7 @@ import {
   releaseVelocityRetention,
   resolveMotionPolicy,
 } from "../src/app/graph-layout";
-import { blendGraphTone, nodeTone, relationTone } from "../src/app/graph-theme";
+import { blendGraphTone, emphasizeNodeTone, nodeTone, relationTone } from "../src/app/graph-theme";
 import type { GraphManifest } from "../src/shared/contracts";
 
 const manifest: GraphManifest = {
@@ -766,6 +766,8 @@ describe("graph color policy", () => {
   it("uses neutral node and connector tones with subdued inactive edges", () => {
     expect(nodeTone()).toBe("#b8bcc2");
     expect(relationTone()).toBe("#8c9197");
+    expect(emphasizeNodeTone(nodeTone(), 0)).toBe(nodeTone());
+    expect(emphasizeNodeTone(nodeTone(), 1)).toBe("#ffffff");
     expect(blendGraphTone("#d97757", 0)).toBe("#17181a");
     expect(blendGraphTone("#d97757", 1)).toBe("#d97757");
   });

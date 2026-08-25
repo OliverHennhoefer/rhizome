@@ -277,6 +277,7 @@ test("clears selection on a stage click while preserving double-click zoom", asy
   await page.mouse.click(singleClickPoint.x, singleClickPoint.y);
   await expect(page.getByTestId("reader")).toHaveCount(0);
   await expect(page).not.toHaveURL(/note=/);
+  await expect(graph).not.toHaveAttribute("data-emphasis-source", /.+/);
 
   await searchNotes(page, "subword tokenization");
   await page.getByRole("button", { name: /Subword tokenization/ }).click();
@@ -409,6 +410,9 @@ test("selection-only navigation does not reheat the settled graph", async ({ pag
   await page.waitForTimeout(300);
   await expect(graph).toHaveAttribute("data-layout-status", "settled");
   await expect(graph).toHaveAttribute("data-pinned-count", "0");
+  await findEmptyGraphPoint(page, graph);
+  await expect(graph).not.toHaveAttribute("data-hovered-node", /.+/);
+  await expect(graph).toHaveAttribute("data-emphasis-source", "selection");
 });
 
 test("uses a gradual built-in layout without exposing physics controls", async ({

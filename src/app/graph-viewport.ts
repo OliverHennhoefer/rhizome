@@ -42,7 +42,13 @@ import {
   projectionBaseBounds,
   resolveMotionPolicy,
 } from "./graph-layout";
-import { backTraceNodeTone, blendGraphTone, nodeTone, relationTone } from "./graph-theme";
+import {
+  backTraceNodeTone,
+  blendGraphTone,
+  emphasizeNodeTone,
+  nodeTone,
+  relationTone,
+} from "./graph-theme";
 
 export interface GraphViewportSnapshot {
   backTraceVisits: ReadonlyMap<string, number>;
@@ -136,7 +142,7 @@ export class GraphViewportSession {
 
     const drawHover: NodeHoverDrawingFunction<GraphNode, RuntimeGraphEdge> = (context, data) => {
       const key = (data as typeof data & { key?: string }).key;
-      const emphasisRoot = this.currentEmphasisState().root;
+      const rootEmphasis = key ? this.hoverEmphasis(key) : 0;
       if (key && this.positions.isPinned(key)) {
         context.beginPath();
         context.arc(data.x, data.y, data.size + 4, 0, Math.PI * 2);
@@ -151,10 +157,10 @@ export class GraphViewportSession {
         context.lineWidth = 1.5;
         context.stroke();
       }
-      if (key === emphasisRoot) {
+      if (rootEmphasis > 0) {
         context.beginPath();
         context.arc(data.x, data.y, data.size + 5, 0, Math.PI * 2);
-        context.strokeStyle = "#f5f5f7";
+        context.strokeStyle = `rgba(245, 245, 247, ${rootEmphasis})`;
         context.lineWidth = 1.5;
         context.stroke();
       }
@@ -221,16 +227,14 @@ export class GraphViewportSession {
 
   private nodeSize(node: string, data: GraphNode): number {
     const baseSize = nodeRadius(data);
-    const size = node === this.selected ? Math.max(12.5, baseSize + 2) : baseSize;
-    const neighborSize = this.selectedNeighbors.has(node) ? size + 0.7 : size;
-    return neighborSize + this.hoverEmphasis(node) * 1.5;
+    return baseSize + this.hoverEmphasis(node) * 1.5 + this.neighborEmphasis(node) * 0.7;
   }
 
   private reduceNode(node: string, data: GraphNode) {
     const isSelected = node === this.selected;
-    const isSelectedNeighbor = this.selectedNeighbors.has(node);
     const isHovered = node === this.hovered;
-    const isEmphasisRoot = node === this.currentEmphasisState().root;
+    const rootEmphasis = this.hoverEmphasis(node);
+    const neighborEmphasis = this.neighborEmphasis(node);
     const isPinned = this.positions.isPinned(node);
     const isSearchMatch = this.searchMatches?.has(node) ?? false;
     const searchRelated = !this.searchMatches || isSearchMatch;
@@ -245,7 +249,8 @@ export class GraphViewportSession {
     const tone = searchRelated ? hoverTone : minimumTone;
     const visits = this.backTraceVisits.get(node) ?? 0;
     const isStained = visits > 0;
-    const color = isStained ? backTraceNodeTone(visits) : isSelected ? "#ffffff" : nodeTone();
+    const baseColor = isStained ? backTraceNodeTone(visits) : nodeTone();
+    const color = isStained ? baseColor : emphasizeNodeTone(baseColor, rootEmphasis);
     const size = this.nodeSize(node, data);
     return {
       ...data,
@@ -253,9 +258,15 @@ export class GraphViewportSession {
       color: blendGraphTone(color, tone),
       size: isSearchMatch ? size + 1.2 : size,
       zIndex:
-        isSelected || isHovered ? 4 : isPinned || isSearchMatch ? 3 : isSelectedNeighbor ? 2 : 1,
+        isSelected || isHovered || rootEmphasis > 0
+          ? 4
+          : isPinned || isSearchMatch
+            ? 3
+            : neighborEmphasis > 0
+              ? 2
+              : 1,
       forceLabel: true,
-      highlighted: isPinned || isEmphasisRoot || (isSelected && isStained),
+      highlighted: isPinned || rootEmphasis > 0 || (isSelected && isStained),
     };
   }
 
@@ -329,6 +340,18 @@ export class GraphViewportSession {
     return interpolateHoverValue(
       node === transition.from.root ? 1 : 0,
       node === transition.to.root ? 1 : 0,
+      transition.progress,
+    );
+  }
+
+  private neighborEmphasis(node: string): number {
+    const strength = (state: GraphEmphasisState) =>
+      state.root && state.neighbors.has(node) ? 1 : 0;
+    const transition = this.hoverTransition;
+    if (!transition) return strength(this.currentEmphasisState());
+    return interpolateHoverValue(
+      strength(transition.from),
+      strength(transition.to),
       transition.progress,
     );
   }
