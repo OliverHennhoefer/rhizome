@@ -11,6 +11,11 @@ hosted backend.
 Markdown repository → GitHub Actions → graph-native GitHub Pages site
 ```
 
+> [!TIP]
+> Fork this repository or use it as a template, then replace the example notes in
+> [`content/`](content) with your Obsidian vault. For most vaults, that is the only content change
+> required; enable GitHub Pages once to publish.
+
 ## What it does
 
 - Compiles wikilinks, Markdown links, tags, aliases, and declared Properties into a typed graph.
