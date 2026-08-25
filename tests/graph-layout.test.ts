@@ -11,15 +11,18 @@ import {
   buildPhysicalLinks,
   clampPositionToRadius,
   createDisplayGraph,
+  dragImpulseScale,
   dragVelocityRetention,
   FORCE_SETTINGS,
   GraphMotionController,
   GraphPositionStore,
   isMotionEligible,
   nodeRadius,
+  type Position,
   ProjectionInvariantError,
   physicalLinkStrength,
   projectionBaseBounds,
+  releaseVelocityRetention,
 } from "../src/app/graph-layout";
 import { blendGraphTone, nodeTone, relationTone } from "../src/app/graph-theme";
 import type { GraphManifest } from "../src/shared/contracts";
@@ -93,6 +96,73 @@ const manifest: GraphManifest = {
 
 function projection(nodes: string[], edges: string[]): GraphProjection {
   return { nodes: new Set(nodes), edges: new Set(edges) };
+}
+
+const CHAIN_NODE_IDS = ["a", "b", "c", "d", "e"] as const;
+
+function chainManifest(nodeCount = 3): GraphManifest {
+  const ids = CHAIN_NODE_IDS.slice(0, nodeCount);
+  return {
+    ...manifest,
+    nodes: ids.map((id, index) => ({
+      ...(manifest.nodes[Math.min(index, manifest.nodes.length - 1)] ?? manifest.nodes[0]),
+      id,
+      title: id.toUpperCase(),
+      detailsRef: id,
+      x: index * FORCE_SETTINGS.linkDistance,
+      y: 0,
+      degree: index === 0 || index === ids.length - 1 ? 1 : 2,
+    })),
+    edges: ids.slice(0, -1).map((source, index) => ({
+      id: index === 0 ? "ab-link" : index === 1 ? "bc" : `${source}${ids[index + 1]}`,
+      source,
+      target: ids[index + 1] ?? source,
+      type: "link",
+      directed: false,
+      occurrences: 1,
+    })),
+  };
+}
+
+function hubManifest(): GraphManifest {
+  const positions: Record<string, Position> = {
+    h: { x: 0, y: 0 },
+    a: { x: 38, y: 0 },
+    b: { x: -38, y: 0 },
+    c: { x: 0, y: 38 },
+    d: { x: 0, y: -38 },
+    e: { x: 76, y: 0 },
+    f: { x: 114, y: 0 },
+    g: { x: 152, y: 0 },
+  };
+  const paths = [
+    ["h", "a"],
+    ["h", "b"],
+    ["h", "c"],
+    ["h", "d"],
+    ["a", "e"],
+    ["e", "f"],
+    ["f", "g"],
+  ] as const;
+  return {
+    ...manifest,
+    nodes: Object.entries(positions).map(([id, position]) => ({
+      ...(manifest.nodes[0] as GraphManifest["nodes"][number]),
+      id,
+      title: id.toUpperCase(),
+      detailsRef: id,
+      ...position,
+      degree: paths.filter(([source, target]) => source === id || target === id).length,
+    })),
+    edges: paths.map(([source, target]) => ({
+      id: `${source}-${target}`,
+      source,
+      target,
+      type: "link",
+      directed: false,
+      occurrences: 1,
+    })),
+  };
 }
 
 describe("display graph", () => {
@@ -237,6 +307,25 @@ describe("motion policy and position state", () => {
     );
   });
 
+  it("sends a rapidly decaying drag impulse through indirect connections", () => {
+    expect(dragImpulseScale(0)).toBe(0);
+    expect(dragImpulseScale(1)).toBe(FORCE_SETTINGS.dragImpulseScale);
+    expect(dragImpulseScale(2)).toBeLessThan(dragImpulseScale(1) / 2);
+    expect(dragImpulseScale(3)).toBeLessThan(dragImpulseScale(2) / 2);
+    expect(dragImpulseScale(4)).toBe(0);
+    expect(dragImpulseScale(Number.POSITIVE_INFINITY)).toBe(0);
+  });
+
+  it("strongly localizes velocity throughout release", () => {
+    expect(releaseVelocityRetention(0)).toBe(FORCE_SETTINGS.releaseRootVelocityRetention);
+    expect(releaseVelocityRetention(1)).toBe(FORCE_SETTINGS.releaseDirectVelocityRetention);
+    expect(releaseVelocityRetention(2)).toBeLessThan(releaseVelocityRetention(1));
+    expect(releaseVelocityRetention(3)).toBeLessThan(releaseVelocityRetention(2));
+    expect(releaseVelocityRetention(Number.POSITIVE_INFINITY)).toBe(
+      FORCE_SETTINGS.releaseMinimumVelocityRetention,
+    );
+  });
+
   it("applies desktop and compact thresholds", () => {
     expect(isMotionEligible(projection(["a", "b"], []), false)).toBe(true);
     expect(
@@ -359,20 +448,12 @@ describe("motion policy and position state", () => {
     controller.kill();
   });
 
-  it("propagates a sustained drag gradually through the connection chain", async () => {
-    const chainManifest: GraphManifest = {
-      ...manifest,
-      nodes: manifest.nodes.map((node, index) => ({
-        ...node,
-        x: index * FORCE_SETTINGS.linkDistance,
-        y: 0,
-      })),
-    };
-    const source = createGraph(chainManifest);
+  it("propagates a sustained drag gradually through three connection hops", async () => {
+    const source = createGraph(chainManifest(4));
     const positions = new GraphPositionStore(source);
     const display = createDisplayGraph(
       source,
-      projection(["a", "b", "c"], ["ab-link", "bc"]),
+      projection(["a", "b", "c", "d"], ["ab-link", "bc", "cd"]),
       positions,
     );
     const controller = new GraphMotionController({
@@ -385,6 +466,7 @@ describe("motion policy and position state", () => {
 
     const directOrigin = positions.getCurrent("b").x;
     const indirectOrigin = positions.getCurrent("c").x;
+    const thirdHopOrigin = positions.getCurrent("d").x;
     controller.beginDrag("a", positions.getCurrent("a"), 0);
     controller.moveDrag("a", { x: -120, y: 0 }, 16);
     controller.pause();
@@ -392,13 +474,154 @@ describe("motion policy and position state", () => {
 
     const directEarly = Math.abs(positions.getCurrent("b").x - directOrigin);
     const indirectEarly = Math.abs(positions.getCurrent("c").x - indirectOrigin);
+    const thirdHopEarly = Math.abs(positions.getCurrent("d").x - thirdHopOrigin);
     expect(directEarly).toBeGreaterThan(indirectEarly);
     expect(indirectEarly).toBeGreaterThan(0);
+    expect(thirdHopEarly).toBeGreaterThan(0);
 
     controller.advance(36);
     const indirectLater = Math.abs(positions.getCurrent("c").x - indirectOrigin);
+    const thirdHopLater = Math.abs(positions.getCurrent("d").x - thirdHopOrigin);
     expect(indirectLater).toBeGreaterThan(indirectEarly);
+    expect(thirdHopLater).toBeGreaterThan(thirdHopEarly);
     controller.kill();
+  });
+
+  it("keeps an abrupt leaf-node release local without a mouse-up impulse", async () => {
+    const source = createGraph(chainManifest(5));
+    const positions = new GraphPositionStore(source);
+    const display = createDisplayGraph(
+      source,
+      projection(["a", "b", "c", "d", "e"], ["ab-link", "bc", "cd", "de"]),
+      positions,
+    );
+    const controller = new GraphMotionController({
+      graph: display,
+      positions,
+      onStatus: () => undefined,
+      onPinnedChange: () => undefined,
+    });
+    await controller.start(true);
+
+    const directOrigin = positions.getCurrent("b").x;
+    const indirectOrigin = positions.getCurrent("c").x;
+    const distantOrigin = positions.getCurrent("e").x;
+    controller.beginDrag("a", positions.getCurrent("a"), 0);
+    controller.moveDrag("a", { x: -120, y: 0 }, 16);
+    const beforeRelease = ["b", "c", "d", "e"].map((id) => positions.getCurrent(id));
+    controller.endDrag("a", false, 16);
+    expect(["b", "c", "d", "e"].map((id) => positions.getCurrent(id))).toEqual(beforeRelease);
+    controller.pause();
+    controller.advance(12);
+
+    const directMovement = Math.abs(positions.getCurrent("b").x - directOrigin);
+    const indirectMovement = Math.abs(positions.getCurrent("c").x - indirectOrigin);
+    const distantMovement = Math.abs(positions.getCurrent("e").x - distantOrigin);
+    expect(directMovement).toBeGreaterThan(indirectMovement);
+    expect(distantMovement).toBeLessThan(directMovement * 0.1);
+    expect(distantMovement).toBeLessThan(0.5);
+    controller.kill();
+  });
+
+  it("does not translate a disconnected node during another node's release", async () => {
+    const source = createGraph(manifest);
+    const positions = new GraphPositionStore(source);
+    const display = createDisplayGraph(source, projection(["a", "c"], []), positions);
+    const controller = new GraphMotionController({
+      graph: display,
+      positions,
+      onStatus: () => undefined,
+      onPinnedChange: () => undefined,
+    });
+    await controller.start(true);
+
+    const distantOrigin = positions.getCurrent("c");
+    controller.beginDrag("a", positions.getCurrent("a"), 0);
+    controller.moveDrag("a", { x: -120, y: 0 }, 16);
+    controller.endDrag("a", false, 16);
+    controller.pause();
+    controller.advance(12);
+
+    const distant = positions.getCurrent("c");
+    expect(Math.hypot(distant.x - distantOrigin.x, distant.y - distantOrigin.y)).toBeLessThan(0.5);
+    controller.kill();
+  });
+
+  it("does not accumulate a distant release shock across repeated quick drags", async () => {
+    async function run(dragCount: number): Promise<Position> {
+      const source = createGraph(chainManifest(5));
+      const positions = new GraphPositionStore(source);
+      const display = createDisplayGraph(
+        source,
+        projection(["a", "b", "c", "d", "e"], ["ab-link", "bc", "cd", "de"]),
+        positions,
+      );
+      const controller = new GraphMotionController({
+        graph: display,
+        positions,
+        onStatus: () => undefined,
+        onPinnedChange: () => undefined,
+      });
+      await controller.start(true);
+
+      for (let index = 0; index < dragCount; index += 1) {
+        const origin = positions.getCurrent("a");
+        controller.beginDrag("a", origin, index * 32);
+        controller.moveDrag(
+          "a",
+          { x: origin.x + (index % 2 === 0 ? -80 : 80), y: 0 },
+          index * 32 + 16,
+        );
+        controller.endDrag("a", false, index * 32 + 16);
+        controller.pause();
+      }
+      controller.advance(20);
+      const distant = positions.getCurrent("e");
+      controller.kill();
+      return distant;
+    }
+
+    const single = await run(1);
+    const repeated = await run(3);
+    expect(repeated.x).toBeCloseTo(single.x, 6);
+    expect(repeated.y).toBeCloseTo(single.y, 6);
+  });
+
+  it("lets a dragged hub influence its neighborhood by decreasing hop distance", async () => {
+    async function run(targetX: number): Promise<Map<string, Position>> {
+      const source = createGraph(hubManifest());
+      const positions = new GraphPositionStore(source);
+      const nodeIds = ["h", "a", "b", "c", "d", "e", "f", "g"];
+      const edgeIds = ["h-a", "h-b", "h-c", "h-d", "a-e", "e-f", "f-g"];
+      const display = createDisplayGraph(source, projection(nodeIds, edgeIds), positions);
+      const controller = new GraphMotionController({
+        graph: display,
+        positions,
+        onStatus: () => undefined,
+        onPinnedChange: () => undefined,
+      });
+      await controller.start(true);
+      controller.beginDrag("h", positions.getCurrent("h"), 0);
+      controller.moveDrag("h", { x: targetX, y: 0 }, 16);
+      controller.pause();
+      controller.advance(16);
+      const result = new Map(
+        ["a", "e", "f", "g"].map((id) => [id, positions.getCurrent(id)] as const),
+      );
+      controller.kill();
+      return result;
+    }
+
+    const baseline = await run(0);
+    const dragged = await run(-100);
+    const movement = (id: string) => {
+      const origin = baseline.get(id) as Position;
+      const current = dragged.get(id) as Position;
+      return Math.hypot(current.x - origin.x, current.y - origin.y);
+    };
+    expect(movement("a")).toBeGreaterThan(movement("e"));
+    expect(movement("e")).toBeGreaterThan(movement("f"));
+    expect(movement("f")).toBeGreaterThan(movement("g"));
   });
 
   it("springs a released node firmly back toward its linked neighborhood", async () => {
