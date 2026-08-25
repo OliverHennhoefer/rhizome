@@ -12,7 +12,8 @@ export const ADAPTIVE_MOTION_SETTINGS = {
   consecutiveStalledFramesToLimit: 6,
 } as const;
 
-export const TOUCH_UNRELATED_NODE_OPACITY = 0.42;
+export const TOUCH_UNRELATED_NODE_OPACITY = 0.62;
+export const DESKTOP_UNRELATED_NODE_OPACITY = 0.62;
 
 export interface GraphEmphasisState {
   root?: string;
@@ -34,25 +35,23 @@ export function dragThreshold(touch: boolean): number {
 
 export function unrelatedNodeOpacity(searchActive: boolean, touchSelectionActive: boolean): number {
   if (searchActive) return 0x22 / 0xff;
-  return touchSelectionActive ? TOUCH_UNRELATED_NODE_OPACITY : 0x2e / 0xff;
+  return touchSelectionActive ? TOUCH_UNRELATED_NODE_OPACITY : DESKTOP_UNRELATED_NODE_OPACITY;
 }
 
 export function effectiveLabelRelevance(
   emphasisRelevance: number,
-  touchMode: boolean,
   focusActive: boolean,
   hoverActive: boolean,
 ): number {
-  return touchMode && focusActive && !hoverActive ? 1 : emphasisRelevance;
+  return focusActive && !hoverActive ? 1 : emphasisRelevance;
 }
 
 export function effectiveGraphEmphasis(
   hover: GraphEmphasisState,
   selected: GraphEmphasisState,
-  touchMode: boolean,
 ): GraphEmphasisState {
   if (hover.root) return hover;
-  if (touchMode && selected.root) return selected;
+  if (selected.root) return selected;
   return { neighbors: new Set<string>() };
 }
 

@@ -38,7 +38,6 @@ import {
   GraphPositionStore,
   type LayoutStatus,
   type MotionPolicy,
-  nodeColorWithAlpha,
   nodeRadius,
   projectionBaseBounds,
   resolveMotionPolicy,
@@ -172,7 +171,6 @@ export class GraphViewportSession {
       const relevance = key
         ? effectiveLabelRelevance(
             this.hoverRelevance(key),
-            this.snapshot?.touchMode ?? false,
             this.snapshot?.focus ?? false,
             Boolean(this.hovered),
           )
@@ -242,9 +240,9 @@ export class GraphViewportSession {
         !this.hovered &&
         (this.selected || this.hoverTransition?.from.root),
     );
-    const minimumAlpha = unrelatedNodeOpacity(Boolean(this.searchMatches), touchSelectionActive);
-    const hoverAlpha = interpolateHoverValue(minimumAlpha, 1, hoverRelevance);
-    const alpha = searchRelated ? hoverAlpha : minimumAlpha;
+    const minimumTone = unrelatedNodeOpacity(Boolean(this.searchMatches), touchSelectionActive);
+    const hoverTone = interpolateHoverValue(minimumTone, 1, hoverRelevance);
+    const tone = searchRelated ? hoverTone : minimumTone;
     const visits = this.backTraceVisits.get(node) ?? 0;
     const isStained = visits > 0;
     const color = isStained ? backTraceNodeTone(visits) : isSelected ? "#ffffff" : nodeTone();
@@ -252,12 +250,7 @@ export class GraphViewportSession {
     return {
       ...data,
       label: String(data.title ?? node),
-      color: nodeColorWithAlpha(
-        color,
-        Math.round(alpha * 0xff)
-          .toString(16)
-          .padStart(2, "0"),
-      ),
+      color: blendGraphTone(color, tone),
       size: isSearchMatch ? size + 1.2 : size,
       zIndex:
         isSelected || isHovered ? 4 : isPinned || isSearchMatch ? 3 : isSelectedNeighbor ? 2 : 1,
@@ -313,7 +306,6 @@ export class GraphViewportSession {
     return effectiveGraphEmphasis(
       { root: this.hovered, neighbors: this.hoverNeighbors },
       { root: this.selected, neighbors: this.selectedNeighbors },
-      this.snapshot?.touchMode ?? false,
     );
   }
 

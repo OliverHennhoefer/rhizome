@@ -378,6 +378,11 @@ test("selection-only navigation does not reheat the settled graph", async ({ pag
     .getByRole("region", { name: "Search results" })
     .getByRole("button", { name: /Matrix multiplication/ })
     .click();
+  await expect(graph).toHaveAttribute("data-emphasis-source", "selection");
+  await expect(graph).toHaveAttribute(
+    "data-emphasized-node",
+    "Foundations/Linear algebra/Matrix multiplication",
+  );
   const statuses: Array<string | null> = [];
   for (let sample = 0; sample < 10; sample += 1) {
     statuses.push(await graph.getAttribute("data-layout-status"));
@@ -397,6 +402,7 @@ test("selection-only navigation does not reheat the settled graph", async ({ pag
     "data-hovered-node",
     "Foundations/Linear algebra/Matrix multiplication",
   );
+  await expect(graph).toHaveAttribute("data-emphasis-source", "hover");
   await page.mouse.down();
   await page.mouse.move(x + 2, y + 2);
   await page.mouse.up();

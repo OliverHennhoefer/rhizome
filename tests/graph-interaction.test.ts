@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ADAPTIVE_MOTION_SETTINGS,
+  DESKTOP_UNRELATED_NODE_OPACITY,
   dragThreshold,
   effectiveGraphEmphasis,
   effectiveLabelRelevance,
@@ -16,27 +17,25 @@ describe("touch graph interaction policy", () => {
     expect(dragThreshold(true)).toBe(10);
   });
 
-  it("uses selection as persistent emphasis only in touch mode", () => {
+  it("uses selection as persistent emphasis while allowing hover to take precedence", () => {
     const hover = { neighbors: new Set<string>() };
     const selected = { root: "a", neighbors: new Set(["b", "c"]) };
-    expect(effectiveGraphEmphasis(hover, selected, false).root).toBeUndefined();
-    expect(effectiveGraphEmphasis(hover, selected, true)).toEqual(selected);
-    expect(
-      effectiveGraphEmphasis({ root: "d", neighbors: new Set(["e"]) }, selected, true).root,
-    ).toBe("d");
+    expect(effectiveGraphEmphasis(hover, selected)).toEqual(selected);
+    expect(effectiveGraphEmphasis({ root: "d", neighbors: new Set(["e"]) }, selected).root).toBe(
+      "d",
+    );
   });
 
-  it("moderately fades unrelated touch-selected nodes without changing desktop hover", () => {
+  it("moderately fades unrelated nodes for touch and desktop interactions", () => {
     expect(unrelatedNodeOpacity(false, true)).toBe(TOUCH_UNRELATED_NODE_OPACITY);
-    expect(unrelatedNodeOpacity(false, false)).toBeCloseTo(0x2e / 0xff);
+    expect(unrelatedNodeOpacity(false, false)).toBe(DESKTOP_UNRELATED_NODE_OPACITY);
     expect(unrelatedNodeOpacity(true, true)).toBeCloseTo(0x22 / 0xff);
   });
 
-  it("keeps every focused-projection label visible during touch exploration", () => {
-    expect(effectiveLabelRelevance(0, true, true, false)).toBe(1);
-    expect(effectiveLabelRelevance(0, true, false, false)).toBe(0);
-    expect(effectiveLabelRelevance(0, true, true, true)).toBe(0);
-    expect(effectiveLabelRelevance(0, false, true, false)).toBe(0);
+  it("keeps every focused-projection label visible outside active hover", () => {
+    expect(effectiveLabelRelevance(0, true, false)).toBe(1);
+    expect(effectiveLabelRelevance(0, false, false)).toBe(0);
+    expect(effectiveLabelRelevance(0, true, true)).toBe(0);
   });
 
   it("targets the uncovered mobile graph while preserving the desktop center", () => {
