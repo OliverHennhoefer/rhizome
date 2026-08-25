@@ -258,7 +258,7 @@ export function GraphControls({
             <section aria-label="Back trace" className="back-trace-control">
               <div>
                 <strong>Back trace</strong>
-                <small>Stain opened nodes during this session</small>
+                <small>Highlight your reading path on the graph</small>
               </div>
               <fieldset aria-label="Back trace controls" className="back-trace-actions">
                 <button aria-pressed={backTraceActive} onClick={onToggleBackTrace} type="button">
