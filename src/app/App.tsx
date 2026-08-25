@@ -7,7 +7,8 @@ import { ReaderPane } from "./ReaderPane";
 import { toggleDirectionalFocus } from "./ui-state";
 import { readUrlState, type UrlState, writeUrlState } from "./url-state";
 
-type FilterKey = "types" | "tags" | "relations";
+type FilterKey = "types" | "tags";
+const ALL_RELATIONS = new Set<string>();
 
 function matchesSearch(node: GraphNode, query: string): boolean {
   return [node.title, node.path, ...node.aliases, ...node.tags]
@@ -65,17 +66,17 @@ export function App() {
         ? projectGraph(graph, {
             visibleTypes: state.types,
             visibleTags: state.tags,
-            visibleRelations: state.relations,
+            visibleRelations: ALL_RELATIONS,
             direction: state.direction,
             focusNode,
             depth: state.depth,
           })
         : undefined,
-    [graph, state.depth, state.direction, focusNode, state.relations, state.tags, state.types],
+    [graph, state.depth, state.direction, focusNode, state.tags, state.types],
   );
   const filters = useMemo(
-    () => ({ types: state.types, tags: state.tags, relations: state.relations }),
-    [state.relations, state.tags, state.types],
+    () => ({ types: state.types, tags: state.tags }),
+    [state.tags, state.types],
   );
 
   const searchMatches = useMemo(() => {
@@ -112,7 +113,7 @@ export function App() {
   };
   const clearFilters = () => {
     setSearch("");
-    update({ types: new Set<string>(), tags: new Set<string>(), relations: new Set<string>() });
+    update({ types: new Set<string>(), tags: new Set<string>() });
   };
   const toggleFocus = (direction: "in" | "out") =>
     setState((current) => ({

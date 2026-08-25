@@ -5,7 +5,7 @@ import type { GraphProjection, RhizomeGraph } from "./graph";
 import type { LayoutStatus } from "./graph-layout";
 import { GraphViewportSession } from "./graph-viewport";
 
-type FilterKey = "types" | "tags" | "relations";
+type FilterKey = "types" | "tags";
 
 interface Props {
   graph: RhizomeGraph;

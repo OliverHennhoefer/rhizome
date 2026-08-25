@@ -5,7 +5,6 @@ export interface UrlState {
   direction: "in" | "out" | "both";
   types: Set<string>;
   tags: Set<string>;
-  relations: Set<string>;
 }
 
 export function readUrlState(): UrlState {
@@ -18,7 +17,6 @@ export function readUrlState(): UrlState {
     direction: direction === "in" || direction === "out" ? direction : "both",
     types: new Set(query.getAll("type")),
     tags: new Set(query.getAll("tag")),
-    relations: new Set(query.getAll("relation")),
   };
 }
 
@@ -30,7 +28,6 @@ export function writeUrlState(state: UrlState): void {
   if (state.direction !== "both") query.set("direction", state.direction);
   for (const type of [...state.types].sort()) query.append("type", type);
   for (const tag of [...state.tags].sort()) query.append("tag", tag);
-  for (const relation of [...state.relations].sort()) query.append("relation", relation);
   const value = query.toString();
   window.history.replaceState(null, "", `${window.location.pathname}${value ? `?${value}` : ""}`);
 }

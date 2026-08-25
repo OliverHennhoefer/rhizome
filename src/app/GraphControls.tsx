@@ -3,7 +3,7 @@ import type { GraphManifest, GraphNode } from "../shared/contracts";
 import type { GraphProjection } from "./graph";
 import { pickRandomNoteId } from "./random-note";
 
-type FilterKey = "types" | "tags" | "relations";
+type FilterKey = "types" | "tags";
 type PopoverName = "filters";
 
 interface Props {
@@ -45,13 +45,11 @@ function ToggleGroup({
   title,
   values,
   active,
-  labelForValue,
   onToggle,
 }: {
   title: string;
   values: string[];
   active: Set<string>;
-  labelForValue?: (value: string) => string;
   onToggle: (value: string) => void;
 }) {
   if (values.length === 0) return null;
@@ -65,7 +63,7 @@ function ToggleGroup({
         {values.map((value) => (
           <label key={value}>
             <input type="checkbox" checked={active.has(value)} onChange={() => onToggle(value)} />
-            <span>{labelForValue?.(value) ?? value}</span>
+            <span>{value}</span>
           </label>
         ))}
       </div>
@@ -96,12 +94,11 @@ export function GraphControls({
   const controls = useRef<HTMLDivElement>(null);
   const activeFilters = useMemo(
     () =>
-      (["types", "tags", "relations"] as const).flatMap((key) =>
+      (["types", "tags"] as const).flatMap((key) =>
         [...filters[key]].sort().map((value) => ({ key, value })),
       ),
     [filters],
   );
-  const relationNames = Object.keys(manifest.facets.relations).sort();
   const activeCount = activeFilters.length + (search.trim() ? 1 : 0);
   const visibleNoteCount = useMemo(
     () =>
@@ -282,17 +279,6 @@ export function GraphControls({
               onToggle={(value) => onToggleFilter("tags", value)}
               title="Tags"
               values={Object.keys(manifest.facets.tags).sort()}
-            />
-            <ToggleGroup
-              active={filters.relations}
-              labelForValue={(relation) =>
-                relation === "link"
-                  ? "Wiki links"
-                  : (manifest.config.relations[relation]?.label ?? relation)
-              }
-              onToggle={(value) => onToggleFilter("relations", value)}
-              title="Relations"
-              values={relationNames}
             />
             <button
               className="popover-action"

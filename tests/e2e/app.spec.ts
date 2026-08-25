@@ -226,34 +226,15 @@ test("clears hover state when a focused projection removes the hovered node", as
   await expect(graph).not.toHaveAttribute("data-hovered-neighbor-count", /.+/);
 });
 
-test("recomputes retained hover neighbors after relation filtering", async ({ page }, testInfo) => {
+test("omits relation filtering from graph filters", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "root", "root desktop project only");
-  await page.goto("");
-  const graph = page.getByTestId("graph-2d");
-  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
-  await searchNotes(page, "subword tokenization");
-  await page.getByRole("button", { name: /Subword tokenization/ }).click();
-  await page.waitForTimeout(350);
-
-  const bounds = await graph.boundingBox();
-  expect(bounds).not.toBeNull();
-  if (!bounds) return;
-  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
-  await expect(graph).toHaveAttribute("data-hovered-node", "Language/Subword tokenization");
-  await expect(graph).toHaveAttribute("data-hovered-neighbor-count", "3");
-
-  await page
-    .getByRole("button", { name: "Filters" })
-    .evaluate((element) => (element as unknown as { click(): void }).click());
-  const relations = page.locator("details.filter-group").filter({ hasText: "Relations" });
-  await relations
-    .locator("summary")
-    .evaluate((element) => (element as unknown as { click(): void }).click());
-  await relations
-    .getByRole("checkbox", { name: "Wiki links", exact: true })
-    .evaluate((element) => (element as unknown as { click(): void }).click());
-  await expect(graph).toHaveAttribute("data-hovered-node", "Language/Subword tokenization");
-  await expect(graph).toHaveAttribute("data-hovered-neighbor-count", "2");
+  await page.goto("?relation=link");
+  await expect(page).not.toHaveURL(/relation=/);
+  await page.getByRole("button", { name: "Filters" }).click();
+  const filters = page.getByRole("dialog", { name: "Graph filters" });
+  await expect(filters.getByText("Types", { exact: true })).toBeVisible();
+  await expect(filters.getByText("Tags", { exact: true })).toBeVisible();
+  await expect(filters.getByText("Relations", { exact: true })).toHaveCount(0);
 });
 
 test("selection-only navigation does not reheat the settled graph", async ({ page }, testInfo) => {
@@ -462,20 +443,12 @@ test("keeps oversized projections static without status chrome", async ({ page }
   await expect(page.getByRole("button", { name: "Layout" })).toHaveCount(0);
 });
 
-test("toggles directional focus and returns to a filtered fitted overview", async ({
-  page,
-}, testInfo) => {
+test("toggles directional focus and returns to a fitted overview", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "root", "root desktop project only");
   test.setTimeout(60_000);
   await page.goto("?note=Foundations%2FArithmetic%2FMultiplication");
   const graph = page.getByTestId("graph-2d");
   await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
-
-  await page.getByRole("button", { name: "Filters" }).click();
-  const relations = page.locator("details.filter-group").filter({ hasText: "Relations" });
-  await relations.locator("summary").click();
-  await relations.getByRole("checkbox", { name: "Wiki links", exact: true }).click();
-  await expect(page).toHaveURL(/relation=link/);
 
   const readerFocus = page.getByTestId("reader").getByRole("region", { name: "Graph focus" });
   const inbound = readerFocus.getByRole("button", { name: "What depends on this?" });
@@ -505,7 +478,6 @@ test("toggles directional focus and returns to a filtered fitted overview", asyn
   await page.getByRole("button", { name: "Overview" }).click();
   await expect(page).not.toHaveURL(/focus=1/);
   await expect(page).not.toHaveURL(/direction=in/);
-  await expect(page).toHaveURL(/relation=link/);
   await expect(graph).toHaveAttribute("data-camera-ratio", "1.0800", { timeout: 2_000 });
   await expect(graph).toHaveAttribute("data-layout-status", "running");
   await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
