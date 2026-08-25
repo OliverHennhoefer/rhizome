@@ -39,19 +39,23 @@ export const FORCE_SETTINGS = {
   alphaDecay: 0.014,
   alphaMin: 0.006,
   collisionIterations: 2,
-  dragAlpha: 0.48,
-  dragAlphaTarget: 0.18,
-  dragLinkBoost: 1.5,
-  interactiveVelocityDecay: 0.2,
-  interactiveAnchorStrength: 0.0015,
+  dragAlpha: 0.18,
+  dragAlphaTarget: 0.045,
+  dragLinkFactor: 0.58,
+  dragMaxDisplacement: 160,
+  dragDirectVelocityRetention: 0.72,
+  dragVelocityPropagation: 0.7,
+  dragMinimumVelocityRetention: 0.22,
+  interactiveVelocityDecay: 0.38,
+  interactiveAnchorStrength: 0.0008,
   interactiveMaxDisplacement: 96,
   maxAutomaticDisplacement: 72,
-  maxReleaseVelocity: 6,
-  releaseAlpha: 0.6,
-  releaseLinkBoost: 2,
-  releaseLinkBoostUntilAlpha: 0.14,
-  releaseVelocityScale: 0.85,
-  velocityDecay: 0.28,
+  maxReleaseVelocity: 3,
+  releaseAlpha: 0.2,
+  releaseLinkFactor: 0.65,
+  releaseLinkFactorUntilAlpha: 0.07,
+  releaseVelocityScale: 0.2,
+  velocityDecay: 0.34,
 } as const;
 
 export interface PhysicalLink {
@@ -287,6 +291,16 @@ export function physicalLinkStrength(occurrences: number): number {
   return Math.min(0.16, 0.055 + Math.log1p(Math.max(1, occurrences)) * 0.02);
 }
 
+export function dragVelocityRetention(distance: number): number {
+  if (distance <= 0) return 1;
+  if (!Number.isFinite(distance)) return FORCE_SETTINGS.dragMinimumVelocityRetention;
+  return Math.max(
+    FORCE_SETTINGS.dragMinimumVelocityRetention,
+    FORCE_SETTINGS.dragDirectVelocityRetention *
+      FORCE_SETTINGS.dragVelocityPropagation ** Math.max(0, distance - 1),
+  );
+}
+
 function seededRandom(seed: string): () => number {
   let value = 2166136261;
   for (let index = 0; index < seed.length; index += 1) {
@@ -314,6 +328,7 @@ export class GraphMotionController {
   private nodes = new Map<string, LayoutNode>();
   private activeDrag?: string;
   private releaseNode?: string;
+  private dragDistances = new Map<string, number>();
   private dragOrigin?: Position;
   private dragKinematics?: DragKinematics;
   private interactive = false;
@@ -394,6 +409,7 @@ export class GraphMotionController {
       .force("anchor-x", this.anchorXForce)
       .force("anchor-y", this.anchorYForce)
       .force("collide", collisionForce)
+      .force("drag-inertia", () => this.applyDragInertia())
       .on("tick", () => this.syncPositions())
       .on("end", () => {
         this.syncPositions();
@@ -451,12 +467,40 @@ export class GraphMotionController {
       const target = typeof link.target === "string" ? link.target : link.target.id;
       const incidentToDrag = activeDrag && (source === activeDrag || target === activeDrag);
       const incidentToRelease = releaseNode && (source === releaseNode || target === releaseNode);
-      const boost = incidentToDrag
-        ? FORCE_SETTINGS.dragLinkBoost
+      const factor = incidentToDrag
+        ? FORCE_SETTINGS.dragLinkFactor
         : incidentToRelease
-          ? FORCE_SETTINGS.releaseLinkBoost
+          ? FORCE_SETTINGS.releaseLinkFactor
           : 1;
-      return physicalLinkStrength(link.occurrences) * FORCE_SETTINGS.linkStrengthScale * boost;
+      return physicalLinkStrength(link.occurrences) * FORCE_SETTINGS.linkStrengthScale * factor;
+    });
+  }
+
+  private calculateDragDistances(root: string): void {
+    this.dragDistances.clear();
+    this.dragDistances.set(root, 0);
+    const queue = [root];
+    for (let index = 0; index < queue.length; index += 1) {
+      const current = queue[index];
+      if (!current) continue;
+      const distance = this.dragDistances.get(current) ?? 0;
+      for (const neighbor of this.graph.neighbors(current)) {
+        if (this.dragDistances.has(neighbor)) continue;
+        this.dragDistances.set(neighbor, distance + 1);
+        queue.push(neighbor);
+      }
+    }
+  }
+
+  private applyDragInertia(): void {
+    if (!this.activeDrag) return;
+    this.nodes.forEach((node, id) => {
+      if (id === this.activeDrag || this.positions.isPinned(id)) return;
+      const retention = dragVelocityRetention(
+        this.dragDistances.get(id) ?? Number.POSITIVE_INFINITY,
+      );
+      if (Number.isFinite(node.vx)) node.vx = (node.vx ?? 0) * retention;
+      if (Number.isFinite(node.vy)) node.vy = (node.vy ?? 0) * retention;
     });
   }
 
@@ -465,7 +509,7 @@ export class GraphMotionController {
       !this.releaseNode ||
       this.activeDrag ||
       !this.simulation ||
-      this.simulation.alpha() > FORCE_SETTINGS.releaseLinkBoostUntilAlpha
+      this.simulation.alpha() > FORCE_SETTINGS.releaseLinkFactorUntilAlpha
     ) {
       return;
     }
@@ -484,6 +528,7 @@ export class GraphMotionController {
     this.activeDrag = id;
     this.dragOrigin = { ...position };
     this.interactive = true;
+    this.calculateDragDistances(id);
     this.dragKinematics = {
       lastX: position.x,
       lastY: position.y,
@@ -513,7 +558,7 @@ export class GraphMotionController {
 
   moveDrag(id: string, position: Position, timestamp = performance.now()): void {
     const boundedPosition = this.dragOrigin
-      ? clampPositionToRadius(position, this.dragOrigin, FORCE_SETTINGS.interactiveMaxDisplacement)
+      ? clampPositionToRadius(position, this.dragOrigin, FORCE_SETTINGS.dragMaxDisplacement)
       : position;
     const kinematics = this.dragKinematics;
     if (kinematics && id === this.activeDrag) {
@@ -572,6 +617,7 @@ export class GraphMotionController {
       }
     }
     this.activeDrag = undefined;
+    this.dragDistances.clear();
     this.dragOrigin = undefined;
     this.dragKinematics = undefined;
     this.nodes.forEach((item) => {
@@ -613,6 +659,7 @@ export class GraphMotionController {
     this.anchorYForce = undefined;
     this.dragKinematics = undefined;
     this.releaseNode = undefined;
+    this.dragDistances.clear();
     this.dragOrigin = undefined;
     this.nodes.clear();
   }

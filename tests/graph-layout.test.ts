@@ -11,6 +11,7 @@ import {
   buildPhysicalLinks,
   clampPositionToRadius,
   createDisplayGraph,
+  dragVelocityRetention,
   FORCE_SETTINGS,
   GraphMotionController,
   GraphPositionStore,
@@ -214,12 +215,26 @@ describe("motion policy and position state", () => {
     });
   });
 
-  it("uses a strong-link, slow-cooling motion profile", () => {
+  it("uses a strong-link, slow-cooling, damped motion profile", () => {
     expect(FORCE_SETTINGS.linkStrengthScale).toBeGreaterThan(2);
     expect(FORCE_SETTINGS.alphaDecay).toBeLessThan(0.02);
-    expect(FORCE_SETTINGS.velocityDecay).toBeLessThan(0.3);
+    expect(FORCE_SETTINGS.velocityDecay).toBeGreaterThan(0.3);
+    expect(FORCE_SETTINGS.velocityDecay).toBeLessThan(0.5);
     expect(FORCE_SETTINGS.anchorStrength).toBeLessThan(0.01);
     expect(FORCE_SETTINGS.maxAutomaticDisplacement).toBeGreaterThan(50);
+    expect(FORCE_SETTINGS.dragAlpha).toBeLessThan(FORCE_SETTINGS.initialAlpha / 2);
+    expect(FORCE_SETTINGS.dragLinkFactor).toBeLessThan(1);
+    expect(FORCE_SETTINGS.releaseLinkFactor).toBeLessThan(1);
+  });
+
+  it("attenuates drag velocity with every connection hop", () => {
+    expect(dragVelocityRetention(0)).toBe(1);
+    expect(dragVelocityRetention(1)).toBe(FORCE_SETTINGS.dragDirectVelocityRetention);
+    expect(dragVelocityRetention(2)).toBeLessThan(dragVelocityRetention(1));
+    expect(dragVelocityRetention(3)).toBeLessThan(dragVelocityRetention(2));
+    expect(dragVelocityRetention(Number.POSITIVE_INFINITY)).toBe(
+      FORCE_SETTINGS.dragMinimumVelocityRetention,
+    );
   });
 
   it("applies desktop and compact thresholds", () => {
@@ -316,7 +331,7 @@ describe("motion policy and position state", () => {
     controller.kill();
   });
 
-  it("pulls linked nodes during a drag and preserves release inertia", async () => {
+  it("pulls linked nodes during a drag without flinging the graph on release", async () => {
     const source = createGraph(manifest);
     const positions = new GraphPositionStore(source);
     const display = createDisplayGraph(source, projection(["a", "b"], ["ab-link"]), positions);
@@ -339,8 +354,50 @@ describe("motion policy and position state", () => {
     controller.pause();
     const release = positions.getCurrent("a");
     controller.advance(1);
-    expect(positions.getCurrent("a").x).toBeGreaterThan(release.x);
+    expect(Math.abs(positions.getCurrent("a").x - release.x)).toBeLessThan(2);
     expect(positions.isPinned("a")).toBe(false);
+    controller.kill();
+  });
+
+  it("propagates a sustained drag gradually through the connection chain", async () => {
+    const chainManifest: GraphManifest = {
+      ...manifest,
+      nodes: manifest.nodes.map((node, index) => ({
+        ...node,
+        x: index * FORCE_SETTINGS.linkDistance,
+        y: 0,
+      })),
+    };
+    const source = createGraph(chainManifest);
+    const positions = new GraphPositionStore(source);
+    const display = createDisplayGraph(
+      source,
+      projection(["a", "b", "c"], ["ab-link", "bc"]),
+      positions,
+    );
+    const controller = new GraphMotionController({
+      graph: display,
+      positions,
+      onStatus: () => undefined,
+      onPinnedChange: () => undefined,
+    });
+    await controller.start(true);
+
+    const directOrigin = positions.getCurrent("b").x;
+    const indirectOrigin = positions.getCurrent("c").x;
+    controller.beginDrag("a", positions.getCurrent("a"), 0);
+    controller.moveDrag("a", { x: -120, y: 0 }, 16);
+    controller.pause();
+    controller.advance(4);
+
+    const directEarly = Math.abs(positions.getCurrent("b").x - directOrigin);
+    const indirectEarly = Math.abs(positions.getCurrent("c").x - indirectOrigin);
+    expect(directEarly).toBeGreaterThan(indirectEarly);
+    expect(indirectEarly).toBeGreaterThan(0);
+
+    controller.advance(36);
+    const indirectLater = Math.abs(positions.getCurrent("c").x - indirectOrigin);
+    expect(indirectLater).toBeGreaterThan(indirectEarly);
     controller.kill();
   });
 
@@ -389,7 +446,7 @@ describe("motion policy and position state", () => {
     controller.moveDrag("a", { x: -100_000, y: 0 }, 16);
     const dragged = positions.getCurrent("a");
     expect(Math.hypot(dragged.x - origin.x, dragged.y - origin.y)).toBeCloseTo(
-      FORCE_SETTINGS.interactiveMaxDisplacement,
+      FORCE_SETTINGS.dragMaxDisplacement,
     );
 
     controller.endDrag("a", false, 200);
