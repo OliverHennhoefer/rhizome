@@ -556,7 +556,7 @@ test("hides, restores, and resizes the reader independently from selection", asy
   await expect(separator).toHaveAttribute("aria-valuenow", "420");
 });
 
-test("formats relationships as directional rows with collapsed source evidence", async ({
+test("formats relationships as directional rows with collapsed local source evidence", async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "root", "root desktop project only");
@@ -566,19 +566,22 @@ test("formats relationships as directional rows with collapsed source evidence",
     timeout: 15_000,
   });
 
-  const external = relationships.locator(".relationship").filter({ hasText: "arxiv.org" });
-  await expect(external).toContainText("Supported by");
-  await expect(external).toContainText("Decoupled Weight Decay Regularization");
-  await expect(external).toContainText("abs/1711.05101");
-  await expect(external.getByText("external", { exact: true })).toBeVisible();
-  const evidence = external.getByRole("button", { name: "1 source" });
+  const source = relationships
+    .locator(".relationship")
+    .filter({ hasText: "Supported by" })
+    .filter({ hasText: "Decoupled Weight Decay Regularization" });
+  await expect(source).toContainText("Supported by");
+  await expect(source).toContainText("Sources/Decoupled Weight Decay Regularization.md");
+  await expect(source.getByText("external", { exact: true })).toHaveCount(0);
+  await expect(source.getByRole("link", { name: /new tab/ })).toHaveCount(0);
+  const evidence = source.getByRole("button", { name: "1 source" });
   await expect(evidence).toHaveAttribute("aria-expanded", "false");
   await evidence.click();
-  await expect(external.getByText("Property:")).toContainText("supported-by");
-  await expect(external.getByText("Learning/AdamW.md:11")).toBeVisible();
-  await expect(external.getByRole("link", { name: "Open arxiv.org in a new tab" })).toHaveAttribute(
-    "href",
-    "https://arxiv.org/abs/1711.05101",
+  await expect(source.getByText("Property:")).toContainText("supported-by");
+  await expect(source.getByText("Learning/AdamW.md:11")).toBeVisible();
+  await source.locator(".relationship-main > button").click();
+  await expect(page).toHaveURL(
+    (url) => url.searchParams.get("note") === "Sources/Decoupled Weight Decay Regularization",
   );
 });
 
