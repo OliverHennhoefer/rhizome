@@ -20,7 +20,19 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  background: var(--stage);
+}
+
+.stage::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: calc(100% - var(--reader-overlay-width, 0px));
   background: radial-gradient(circle at 50% 44%, #1b1d20 0, var(--stage) 72%);
+  pointer-events: none;
+  content: "";
+  transition: width 180ms ease;
 }
 
 .graph-canvas {
@@ -110,12 +122,21 @@
 .graph-controls {
   position: absolute;
   top: 14px;
-  right: 14px;
+  right: calc(14px + var(--reader-overlay-width, 0px));
   z-index: 10;
+  transition: right 180ms ease;
 }
 
 .graph-controls.has-open-popover {
   z-index: 20;
+}
+
+body.is-resizing-reader .graph-controls {
+  transition: none;
+}
+
+body.is-resizing-reader .stage::before {
+  transition: none;
 }
 
 .graph-toolbar {
@@ -582,6 +603,11 @@
 }
 
 @media (max-width: 760px) {
+  .stage::before {
+    width: 100%;
+    transition: none;
+  }
+
   .graph-summary {
     left: 10px;
     bottom: 10px;
@@ -596,6 +622,7 @@
   .graph-controls {
     top: 10px;
     right: 10px;
+    transition: none;
   }
 
   .graph-toolbar {

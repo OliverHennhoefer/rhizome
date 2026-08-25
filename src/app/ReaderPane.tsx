@@ -22,6 +22,7 @@ interface Props {
   children?: ReactNode;
   open: boolean;
   onClose: () => void;
+  onDesktopWidthChange: (width: number) => void;
   onMobileHeightChange: (height: number) => void;
   onOpen: () => void;
 }
@@ -69,7 +70,14 @@ function saveWidth(width: number): void {
   }
 }
 
-export function ReaderPane({ children, open, onClose, onMobileHeightChange, onOpen }: Props) {
+export function ReaderPane({
+  children,
+  open,
+  onClose,
+  onDesktopWidthChange,
+  onMobileHeightChange,
+  onOpen,
+}: Props) {
   const compact = useMediaQuery("(max-width: 760px)");
   const [width, setWidth] = useState(readWidth);
   const [mobileHeight, setMobileHeight] = useState<number>(65);
@@ -88,6 +96,10 @@ export function ReaderPane({ children, open, onClose, onMobileHeightChange, onOp
   useEffect(() => {
     if (compact) onMobileHeightChange(mobileHeightRef.current);
   }, [compact, onMobileHeightChange]);
+
+  useEffect(() => {
+    if (!compact) onDesktopWidthChange(width);
+  }, [compact, onDesktopWidthChange, width]);
 
   useEffect(
     () => () => {
@@ -222,7 +234,7 @@ export function ReaderPane({ children, open, onClose, onMobileHeightChange, onOp
   const bounds = readerWidthBounds(window.innerWidth);
   const valueNow = open ? (compact ? Math.round(mobileHeight) : width) : 0;
   const style = {
-    "--reader-width": `${open ? width : 0}px`,
+    "--reader-width": `${width}px`,
     "--reader-sheet-height": `${open ? mobileHeight : 0}%`,
   } as CSSProperties;
 
@@ -243,7 +255,7 @@ export function ReaderPane({ children, open, onClose, onMobileHeightChange, onOp
         onDoubleClick={resetSize}
         onKeyDown={resizeByKeyboard}
         onPointerDown={beginResize}
-        tabIndex={0}
+        tabIndex={open ? 0 : -1}
       />
       {open && children}
     </section>

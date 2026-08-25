@@ -273,11 +273,14 @@ test("clears selection on a stage click while preserving double-click zoom", asy
   await expect(page.getByTestId("reader")).toBeVisible();
   await page.waitForTimeout(350);
 
+  const graphBounds = await graph.boundingBox();
+  expect(graphBounds).not.toBeNull();
   const singleClickPoint = await findEmptyGraphPoint(page, graph);
   await page.mouse.click(singleClickPoint.x, singleClickPoint.y);
   await expect(page.getByTestId("reader")).toHaveCount(0);
   await expect(page).not.toHaveURL(/note=/);
   await expect(graph).not.toHaveAttribute("data-emphasis-source", /.+/);
+  expect(await graph.boundingBox()).toEqual(graphBounds);
 
   await searchNotes(page, "subword tokenization");
   await page.getByRole("button", { name: /Subword tokenization/ }).click();
@@ -630,11 +633,29 @@ test("hides, restores, and resizes the reader independently from selection", asy
   await page.goto("?note=Learning%2FAdamW");
   const graph = page.getByTestId("graph-2d");
   const reader = page.getByTestId("reader");
+  const readerPane = page.locator("#reader-pane");
+  const controls = page.locator(".graph-controls");
   const separator = page.getByRole("separator", { name: "Resize reader" });
   await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
   await expect(reader).toBeVisible();
   await expect(separator).toHaveAttribute("aria-valuenow", "420");
   const cameraRatio = await graph.getAttribute("data-camera-ratio");
+  const graphBounds = await graph.boundingBox();
+  expect(graphBounds).not.toBeNull();
+  await expect
+    .poll(async () => {
+      const [controlBounds, readerBounds] = await Promise.all([
+        controls.boundingBox(),
+        readerPane.boundingBox(),
+      ]);
+      return Boolean(
+        controlBounds && readerBounds && controlBounds.x + controlBounds.width < readerBounds.x,
+      );
+    })
+    .toBe(true);
+  await page.getByRole("button", { name: "Filters", exact: true }).click();
+  await expect(page.getByLabel("Search notes")).toBeVisible();
+  await page.getByRole("button", { name: "Filters", exact: true }).click();
 
   const handle = await separator.boundingBox();
   expect(handle).not.toBeNull();
@@ -650,6 +671,18 @@ test("hides, restores, and resizes the reader independently from selection", asy
     .toBe("500");
   await expect(graph).toHaveAttribute("data-camera-ratio", cameraRatio ?? "1.0000");
   await expect(graph).toHaveAttribute("data-layout-status", "settled");
+  expect(await graph.boundingBox()).toEqual(graphBounds);
+  await expect
+    .poll(async () => {
+      const [controlBounds, readerBounds] = await Promise.all([
+        controls.boundingBox(),
+        readerPane.boundingBox(),
+      ]);
+      return Boolean(
+        controlBounds && readerBounds && controlBounds.x + controlBounds.width < readerBounds.x,
+      );
+    })
+    .toBe(true);
 
   await separator.focus();
   await page.keyboard.press("Home");
@@ -662,6 +695,7 @@ test("hides, restores, and resizes the reader independently from selection", asy
   await expect(page).toHaveURL(/note=Learning%2FAdamW/);
   await expect(page.getByRole("button", { name: "Show reader" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Show reader" })).toBeFocused();
+  expect(await graph.boundingBox()).toEqual(graphBounds);
   await page.getByRole("button", { name: "Show reader" }).click();
   await expect(page.getByTestId("reader")).toBeVisible();
   await expect(separator).toHaveAttribute("aria-valuenow", "420");

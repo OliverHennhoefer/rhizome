@@ -1,19 +1,22 @@
 .reader-pane {
-  position: relative;
-  z-index: 6;
-  flex: 0 0 var(--reader-width);
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
   width: var(--reader-width);
   min-width: 0;
   height: 100%;
   border-left: 1px solid var(--line);
   background: var(--panel);
-  transition:
-    width 180ms ease,
-    flex-basis 180ms ease;
+  transform: translateX(0);
+  transition: transform 180ms ease;
 }
 
 .reader-pane.is-closed {
   border-left-color: transparent;
+  pointer-events: none;
+  transform: translateX(calc(100% + 6px));
 }
 
 .reader-pane.is-resizing {
@@ -523,6 +526,7 @@
 @media (max-width: 760px) {
   .reader-pane {
     position: absolute;
+    top: auto;
     right: 0;
     bottom: 0;
     left: 0;
@@ -535,12 +539,14 @@
     border-bottom: 0;
     border-radius: 18px 18px 0 0;
     box-shadow: 0 -24px 70px rgba(0, 0, 0, 0.28);
+    transform: none;
     transition: height 180ms ease;
   }
 
   .reader-pane.is-closed {
     height: 0;
     border-color: transparent;
+    transform: none;
   }
 
   .reader-pane.is-resizing {

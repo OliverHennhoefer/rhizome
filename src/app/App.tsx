@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
 import type { GraphManifest, GraphNode } from "../shared/contracts";
 import { Graph2D, type Graph2DHandle } from "./Graph2D";
 import { createGraph, projectGraph } from "./graph";
 import { Reader } from "./Reader";
 import { ReaderPane } from "./ReaderPane";
-import { toggleDirectionalFocus } from "./ui-state";
+import { READER_WIDTH, toggleDirectionalFocus } from "./ui-state";
 import { readUrlState, type UrlState, writeUrlState } from "./url-state";
 
 type FilterKey = "types" | "tags";
@@ -37,6 +37,7 @@ export function App() {
   const selectedRef = useRef(initialState.note);
   const graphRef = useRef<Graph2DHandle>(null);
   const [readerOpen, setReaderOpen] = useState(Boolean(initialState.note));
+  const [readerWidth, setReaderWidth] = useState<number>(READER_WIDTH.default);
   const [mobileReaderHeight, setMobileReaderHeight] = useState(65);
   const [touchMode, setTouchMode] = useState(initialTouchMode);
   const [pinnedNodes, setPinnedNodes] = useState<ReadonlySet<string>>(() => new Set());
@@ -185,7 +186,14 @@ export function App() {
   return (
     <main className="app-shell">
       <div className="workspace">
-        <section className="stage">
+        <section
+          className="stage"
+          style={
+            {
+              "--reader-overlay-width": `${readerOpen && state.note ? readerWidth : 0}px`,
+            } as CSSProperties
+          }
+        >
           {!webgl ? (
             <div className="webgl-fallback">
               <h2>Graph rendering unavailable</h2>
@@ -247,6 +255,7 @@ export function App() {
         {state.note && (
           <ReaderPane
             onClose={() => setReaderOpen(false)}
+            onDesktopWidthChange={setReaderWidth}
             onMobileHeightChange={setMobileReaderHeight}
             onOpen={() => setReaderOpen(true)}
             open={readerOpen}
