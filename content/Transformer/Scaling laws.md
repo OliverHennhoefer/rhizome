@@ -12,7 +12,7 @@ depends-on:
   - "[[Data and examples]]"
   - "[[Loss functions]]"
 supported-by:
-  - "[Training Compute-Optimal Large Language Models](https://arxiv.org/abs/2203.15556)"
+  - "[[Sources/Training Compute-Optimal Large Language Models]]"
 ---
 
 # Scaling laws

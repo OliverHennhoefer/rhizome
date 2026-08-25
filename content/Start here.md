@@ -27,5 +27,6 @@ relationships to see where a foundation is reused, or outgoing relationships to 
 concept requires.
 
 > [!tip] Reading the graph
+>
 > **Depends on** means a direct prerequisite. Ordinary links add context without claiming that one
 > idea must be learned first.

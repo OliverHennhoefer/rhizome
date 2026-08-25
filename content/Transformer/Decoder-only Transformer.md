@@ -14,7 +14,7 @@ depends-on:
   - "[[Position information and encodings]]"
   - "[[Output projection and tied embeddings]]"
 supported-by:
-  - "[Attention Is All You Need](https://arxiv.org/abs/1706.03762)"
+  - "[[Sources/Attention Is All You Need]]"
 ---
 
 # Decoder-only Transformer

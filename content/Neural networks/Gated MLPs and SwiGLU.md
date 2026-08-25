@@ -13,7 +13,7 @@ depends-on:
   - "[[Activation functions]]"
   - "[[Multiplication]]"
 supported-by:
-  - "[GLU Variants Improve Transformer](https://arxiv.org/abs/2002.05202)"
+  - "[[Sources/GLU Variants Improve Transformer]]"
 ---
 
 # Gated MLPs and SwiGLU

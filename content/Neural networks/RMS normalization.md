@@ -12,7 +12,7 @@ depends-on:
   - "[[Learned representations]]"
   - "[[Parameters]]"
 supported-by:
-  - "[Root Mean Square Layer Normalization](https://arxiv.org/abs/1910.07467)"
+  - "[[Sources/Root Mean Square Layer Normalization]]"
 ---
 
 # RMS normalization

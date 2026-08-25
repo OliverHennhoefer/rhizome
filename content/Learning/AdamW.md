@@ -8,7 +8,7 @@ depends-on:
   - "[[Optimizers]]"
   - "[[Regularization]]"
 supported-by:
-  - "[Decoupled Weight Decay Regularization](https://arxiv.org/abs/1711.05101)"
+  - "[[Sources/Decoupled Weight Decay Regularization]]"
 ---
 
 # AdamW

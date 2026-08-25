@@ -168,11 +168,20 @@ Malformed surrounding Markdown stays readable: $x + y.
       (edge) => !edge.source.startsWith("external:") && !edge.target.startsWith("external:"),
     );
 
-    expect(notes).toHaveLength(92);
+    expect(notes).toHaveLength(100);
+    expect(manifest.nodes).toHaveLength(notes.length);
     expect(manifest.nodes.some((node) => node.kind === "missing")).toBe(false);
     expect(manifest.diagnostics).toEqual([]);
+    expect(
+      manifest.nodes
+        .filter((node) => {
+          const details = JSON.parse(String(result.assets.get(node.detailsRef))) as NodeDetails;
+          return !details.html?.trim();
+        })
+        .map((node) => node.id),
+    ).toEqual([]);
     expect(internalEdges.length).toBeGreaterThanOrEqual(250);
-    expect(internalEdges.length).toBeLessThanOrEqual(350);
+    expect(internalEdges.length).toBeLessThanOrEqual(375);
     expect(notes.every((node) => node.degree > 0)).toBe(true);
 
     const outgoing = new Map<string, string[]>();
