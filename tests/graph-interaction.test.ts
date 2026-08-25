@@ -3,8 +3,11 @@ import {
   ADAPTIVE_MOTION_SETTINGS,
   dragThreshold,
   effectiveGraphEmphasis,
+  effectiveLabelRelevance,
   selectionViewportPoint,
   shouldLimitAdaptiveMotion,
+  TOUCH_UNRELATED_NODE_OPACITY,
+  unrelatedNodeOpacity,
 } from "../src/app/graph-interaction";
 
 describe("touch graph interaction policy", () => {
@@ -21,6 +24,19 @@ describe("touch graph interaction policy", () => {
     expect(
       effectiveGraphEmphasis({ root: "d", neighbors: new Set(["e"]) }, selected, true).root,
     ).toBe("d");
+  });
+
+  it("moderately fades unrelated touch-selected nodes without changing desktop hover", () => {
+    expect(unrelatedNodeOpacity(false, true)).toBe(TOUCH_UNRELATED_NODE_OPACITY);
+    expect(unrelatedNodeOpacity(false, false)).toBeCloseTo(0x2e / 0xff);
+    expect(unrelatedNodeOpacity(true, true)).toBeCloseTo(0x22 / 0xff);
+  });
+
+  it("keeps every focused-projection label visible during touch exploration", () => {
+    expect(effectiveLabelRelevance(0, true, true, false)).toBe(1);
+    expect(effectiveLabelRelevance(0, true, false, false)).toBe(0);
+    expect(effectiveLabelRelevance(0, true, true, true)).toBe(0);
+    expect(effectiveLabelRelevance(0, false, true, false)).toBe(0);
   });
 
   it("targets the uncovered mobile graph while preserving the desktop center", () => {

@@ -12,6 +12,8 @@ export const ADAPTIVE_MOTION_SETTINGS = {
   consecutiveStalledFramesToLimit: 6,
 } as const;
 
+export const TOUCH_UNRELATED_NODE_OPACITY = 0.42;
+
 export interface GraphEmphasisState {
   root?: string;
   neighbors: ReadonlySet<string>;
@@ -28,6 +30,20 @@ export interface SelectionViewportOptions {
 
 export function dragThreshold(touch: boolean): number {
   return touch ? POINTER_DRAG_THRESHOLDS.touch : POINTER_DRAG_THRESHOLDS.mouse;
+}
+
+export function unrelatedNodeOpacity(searchActive: boolean, touchSelectionActive: boolean): number {
+  if (searchActive) return 0x22 / 0xff;
+  return touchSelectionActive ? TOUCH_UNRELATED_NODE_OPACITY : 0x2e / 0xff;
+}
+
+export function effectiveLabelRelevance(
+  emphasisRelevance: number,
+  touchMode: boolean,
+  focusActive: boolean,
+  hoverActive: boolean,
+): number {
+  return touchMode && focusActive && !hoverActive ? 1 : emphasisRelevance;
 }
 
 export function effectiveGraphEmphasis(

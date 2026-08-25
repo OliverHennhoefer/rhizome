@@ -18,10 +18,12 @@ import {
   ADAPTIVE_MOTION_SETTINGS,
   dragThreshold,
   effectiveGraphEmphasis,
+  effectiveLabelRelevance,
   type GraphEmphasisState,
   sameGraphEmphasis,
   selectionViewportPoint,
   shouldLimitAdaptiveMotion,
+  unrelatedNodeOpacity,
 } from "./graph-interaction";
 import {
   hoverTransitionProgress,
@@ -167,7 +169,15 @@ export class GraphViewportSession {
       if (!data.label || !this.labelZoomStyle.visible) return;
       const { opacity, size } = this.labelZoomStyle;
       const key = (data as typeof data & { key?: string }).key;
-      const labelOpacity = key ? labelOpacityForHover(opacity, this.hoverRelevance(key)) : opacity;
+      const relevance = key
+        ? effectiveLabelRelevance(
+            this.hoverRelevance(key),
+            this.snapshot?.touchMode ?? false,
+            this.snapshot?.focus ?? false,
+            Boolean(this.hovered),
+          )
+        : 1;
+      const labelOpacity = labelOpacityForHover(opacity, relevance);
       if (labelOpacity === 0) return;
       const x = data.x + data.size + Math.max(3, size * 0.38);
       context.save();
@@ -227,7 +237,12 @@ export class GraphViewportSession {
     const isSearchMatch = this.searchMatches?.has(node) ?? false;
     const searchRelated = !this.searchMatches || isSearchMatch;
     const hoverRelevance = this.hoverRelevance(node);
-    const minimumAlpha = this.searchMatches ? 0x22 / 0xff : 0x2e / 0xff;
+    const touchSelectionActive = Boolean(
+      this.snapshot?.touchMode &&
+        !this.hovered &&
+        (this.selected || this.hoverTransition?.from.root),
+    );
+    const minimumAlpha = unrelatedNodeOpacity(Boolean(this.searchMatches), touchSelectionActive);
     const hoverAlpha = interpolateHoverValue(minimumAlpha, 1, hoverRelevance);
     const alpha = searchRelated ? hoverAlpha : minimumAlpha;
     const visits = this.backTraceVisits.get(node) ?? 0;

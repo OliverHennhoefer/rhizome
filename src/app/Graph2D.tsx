@@ -172,6 +172,7 @@ export const Graph2D = forwardRef<Graph2DHandle, Props>(function Graph2D(
         className="graph-canvas"
         data-layout-status={status}
         data-pinned-count={pinnedCount}
+        data-projection-node-count={projection.nodes.size}
         data-testid="graph-2d"
         ref={container}
       />

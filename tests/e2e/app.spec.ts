@@ -830,12 +830,20 @@ test("mobile touch retains graph controls and directional navigation", async ({
   await page.getByRole("button", { name: "Filters" }).tap();
   const backTrace = page.getByRole("region", { name: "Back trace" });
   await backTrace.getByRole("button", { name: "Activate" }).tap();
-  await page.getByRole("button", { name: "Open a random visible note" }).tap();
+  await page.getByLabel("Search notes").fill("multiplication");
+  await page.getByRole("button", { name: /^Multiplication/ }).tap();
   await expect(page.getByTestId("reader")).toBeVisible();
-  await expect(page.getByTestId("graph-2d")).toHaveAttribute("data-back-trace-node-count", "1");
+  const graph = page.getByTestId("graph-2d");
+  await expect(graph).toHaveAttribute("data-back-trace-node-count", "1");
   await page.getByRole("button", { name: "What depends on this?" }).tap();
   await expect(page).toHaveURL(/focus=1/);
   await expect(page.getByRole("region", { name: "Active graph focus" })).toBeVisible();
+  const initialNodeCount = Number(await graph.getAttribute("data-projection-node-count"));
+  await page.getByLabel(/Depth/).fill("2");
+  await expect(page).toHaveURL(/depth=2/);
+  await expect
+    .poll(async () => Number(await graph.getAttribute("data-projection-node-count")))
+    .toBeGreaterThan(initialNodeCount);
   await page.getByRole("button", { name: "Overview" }).tap();
   await expect(page).not.toHaveURL(/focus=1/);
 });
