@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { GraphManifest, GraphNode } from "../shared/contracts";
 import { GraphControls } from "./GraphControls";
 import type { GraphProjection, RhizomeGraph } from "./graph";
@@ -19,6 +19,8 @@ interface Props {
   depth: number;
   filters: Record<FilterKey, Set<string>>;
   readerOpen: boolean;
+  mobileReaderHeight: number;
+  touchMode: boolean;
   search: string;
   searchMatches?: ReadonlySet<string>;
   searchResults: GraphNode[];
@@ -33,6 +35,11 @@ interface Props {
   onClearFilters: () => void;
   onSearchChange: (value: string) => void;
   onToggleReader: () => void;
+  onPinnedNodesChange: (pinned: ReadonlySet<string>) => void;
+}
+
+export interface Graph2DHandle {
+  setPinned: (id: string, pinned: boolean) => void;
 }
 
 function useMediaQuery(query: string): boolean {
@@ -47,47 +54,65 @@ function useMediaQuery(query: string): boolean {
   return matches;
 }
 
-export function Graph2D({
-  graph,
-  manifest,
-  projection,
-  backTraceActive,
-  backTraceVisits,
-  selected,
-  focus,
-  direction,
-  depth,
-  filters,
-  readerOpen,
-  search,
-  searchMatches,
-  searchResults,
-  overviewRevision,
-  onSelect,
-  onClearSelection,
-  onOverview,
-  onResetBackTrace,
-  onClearFocus,
-  onToggleBackTrace,
-  onToggleFilter,
-  onClearFilters,
-  onSearchChange,
-  onToggleReader,
-}: Props) {
+export const Graph2D = forwardRef<Graph2DHandle, Props>(function Graph2D(
+  {
+    graph,
+    manifest,
+    projection,
+    backTraceActive,
+    backTraceVisits,
+    selected,
+    focus,
+    direction,
+    depth,
+    filters,
+    readerOpen,
+    mobileReaderHeight,
+    touchMode,
+    search,
+    searchMatches,
+    searchResults,
+    overviewRevision,
+    onSelect,
+    onClearSelection,
+    onOverview,
+    onResetBackTrace,
+    onClearFocus,
+    onToggleBackTrace,
+    onToggleFilter,
+    onClearFilters,
+    onSearchChange,
+    onToggleReader,
+    onPinnedNodesChange,
+  }: Props,
+  ref,
+) {
   const container = useRef<HTMLDivElement>(null);
   const session = useRef<GraphViewportSession | undefined>(undefined);
   const appliedOverviewRevision = useRef(overviewRevision);
   const compact = useMediaQuery("(pointer: coarse), (max-width: 720px)");
+  const readerCompact = useMediaQuery("(max-width: 760px)");
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const [status, setStatus] = useState<LayoutStatus>("paused");
   const [pinnedCount, setPinnedCount] = useState(0);
   const motionEnabled = !reducedMotion;
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      setPinned: (id, pinned) => session.current?.setPinned(id, pinned),
+    }),
+    [],
+  );
+
   useEffect(() => {
     if (!container.current) return;
     const viewport = new GraphViewportSession(container.current, graph, {
       onStatus: setStatus,
-      onPinnedCount: setPinnedCount,
+      onPinnedChange: (pinned) => {
+        setPinnedCount(pinned.size);
+        onPinnedNodesChange(pinned);
+      },
     });
     const resizeObserver = new ResizeObserver(() => viewport.resize());
     resizeObserver.observe(container.current);
@@ -97,7 +122,7 @@ export function Graph2D({
       session.current = undefined;
       viewport.destroy();
     };
-  }, [graph]);
+  }, [graph, onPinnedNodesChange]);
 
   useEffect(() => {
     const viewport = session.current;
@@ -110,6 +135,10 @@ export function Graph2D({
       focus,
       motionEnabled,
       compact,
+      touchMode,
+      readerOpen,
+      readerCompact,
+      mobileReaderHeight,
       reducedMotion,
       searchMatches,
       onSelect,
@@ -123,14 +152,18 @@ export function Graph2D({
     backTraceVisits,
     compact,
     focus,
+    mobileReaderHeight,
     motionEnabled,
     onClearSelection,
     onSelect,
     overviewRevision,
     projection,
+    readerCompact,
+    readerOpen,
     reducedMotion,
     searchMatches,
     selected,
+    touchMode,
   ]);
 
   return (
@@ -167,4 +200,4 @@ export function Graph2D({
       />
     </>
   );
-}
+});

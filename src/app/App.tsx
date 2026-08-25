@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GraphManifest, GraphNode } from "../shared/contracts";
-import { Graph2D } from "./Graph2D";
+import { Graph2D, type Graph2DHandle } from "./Graph2D";
 import { createGraph, projectGraph } from "./graph";
 import { Reader } from "./Reader";
 import { ReaderPane } from "./ReaderPane";
@@ -25,13 +25,21 @@ function hasWebGl(): boolean {
   }
 }
 
+function initialTouchMode(): boolean {
+  return window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+}
+
 export function App() {
   const [initialState] = useState<UrlState>(() => readUrlState());
   const [manifest, setManifest] = useState<GraphManifest>();
   const [loadError, setLoadError] = useState<string>();
   const [state, setState] = useState<UrlState>(initialState);
   const selectedRef = useRef(initialState.note);
+  const graphRef = useRef<Graph2DHandle>(null);
   const [readerOpen, setReaderOpen] = useState(Boolean(initialState.note));
+  const [mobileReaderHeight, setMobileReaderHeight] = useState(65);
+  const [touchMode, setTouchMode] = useState(initialTouchMode);
+  const [pinnedNodes, setPinnedNodes] = useState<ReadonlySet<string>>(() => new Set());
   const [overviewRevision, setOverviewRevision] = useState(0);
   const [search, setSearch] = useState("");
   const [backTraceActive, setBackTraceActive] = useState(false);
@@ -63,6 +71,19 @@ export function App() {
   }, []);
 
   useEffect(() => writeUrlState(state), [state]);
+
+  useEffect(() => {
+    const updateInputMode = (event: PointerEvent) => {
+      if (event.pointerType === "touch") setTouchMode(true);
+      else if (event.pointerType === "mouse" || event.pointerType === "pen") setTouchMode(false);
+    };
+    window.addEventListener("pointerdown", updateInputMode, { passive: true });
+    window.addEventListener("pointermove", updateInputMode, { passive: true });
+    return () => {
+      window.removeEventListener("pointerdown", updateInputMode);
+      window.removeEventListener("pointermove", updateInputMode);
+    };
+  }, []);
 
   const graph = useMemo(() => (manifest ? createGraph(manifest) : undefined), [manifest]);
   const focusNode = state.focus ? state.note : undefined;
@@ -198,10 +219,12 @@ export function App() {
               focus={state.focus}
               graph={graph}
               manifest={manifest}
+              mobileReaderHeight={mobileReaderHeight}
               onClearFilters={clearFilters}
               onClearFocus={() => update({ focus: false, direction: "both" })}
               onClearSelection={clearSelection}
               onOverview={showOverview}
+              onPinnedNodesChange={setPinnedNodes}
               onResetBackTrace={() => setBackTraceVisits(new Map())}
               onSelect={select}
               onToggleBackTrace={() => setBackTraceActive((current) => !current)}
@@ -210,10 +233,12 @@ export function App() {
               overviewRevision={overviewRevision}
               projection={projection}
               readerOpen={readerOpen}
+              ref={graphRef}
               search={search}
               searchMatches={searchMatches}
               searchResults={results}
               selected={state.note}
+              touchMode={touchMode}
               onSearchChange={setSearch}
             />
           )}
@@ -222,6 +247,7 @@ export function App() {
         {state.note && (
           <ReaderPane
             onClose={() => setReaderOpen(false)}
+            onMobileHeightChange={setMobileReaderHeight}
             onOpen={() => setReaderOpen(true)}
             open={readerOpen}
           >
@@ -232,9 +258,15 @@ export function App() {
               manifest={manifest}
               onClose={closeReaderFromContent}
               onDepthChange={(depth) => update({ depth })}
+              onPinnedChange={(pinned) => {
+                if (state.note) graphRef.current?.setPinned(state.note, pinned);
+              }}
               onSelect={select}
               onToggleFocus={toggleFocus}
+              pinAvailable={projection.nodes.has(state.note)}
+              pinned={pinnedNodes.has(state.note)}
               selected={state.note}
+              showPinAction={webgl && touchMode}
             />
           </ReaderPane>
         )}

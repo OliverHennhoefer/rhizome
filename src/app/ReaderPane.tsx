@@ -22,6 +22,7 @@ interface Props {
   children?: ReactNode;
   open: boolean;
   onClose: () => void;
+  onMobileHeightChange: (height: number) => void;
   onOpen: () => void;
 }
 
@@ -68,19 +69,25 @@ function saveWidth(width: number): void {
   }
 }
 
-export function ReaderPane({ children, open, onClose, onOpen }: Props) {
+export function ReaderPane({ children, open, onClose, onMobileHeightChange, onOpen }: Props) {
   const compact = useMediaQuery("(max-width: 760px)");
   const [width, setWidth] = useState(readWidth);
   const [mobileHeight, setMobileHeight] = useState<number>(65);
+  const mobileHeightRef = useRef(mobileHeight);
   const [resizing, setResizing] = useState(false);
   const drag = useRef<DragState | undefined>(undefined);
   const pointerListeners = useRef<AbortController | undefined>(undefined);
+  mobileHeightRef.current = mobileHeight;
 
   useEffect(() => {
     const onResize = () => setWidth((current) => clampReaderWidth(current, window.innerWidth));
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
+  useEffect(() => {
+    if (compact) onMobileHeightChange(mobileHeightRef.current);
+  }, [compact, onMobileHeightChange]);
 
   useEffect(
     () => () => {
@@ -117,8 +124,11 @@ export function ReaderPane({ children, open, onClose, onOpen }: Props) {
   const finishResize = (event: globalThis.PointerEvent) => {
     const active = drag.current;
     if (!active || active.pointerId !== event.pointerId) return;
-    if (active.mobile) setMobileHeight(nearestMobileReaderSnap(active.lastHeight));
-    else saveWidth(active.lastWidth);
+    if (active.mobile) {
+      const next = nearestMobileReaderSnap(active.lastHeight);
+      setMobileHeight(next);
+      onMobileHeightChange(next);
+    } else saveWidth(active.lastWidth);
     pointerListeners.current?.abort();
     pointerListeners.current = undefined;
     drag.current = undefined;
@@ -176,7 +186,9 @@ export function ReaderPane({ children, open, onClose, onOpen }: Props) {
       else return;
       event.preventDefault();
       if (!open) onOpen();
-      setMobileHeight(MOBILE_READER_SNAPS[nextIndex]);
+      const next = MOBILE_READER_SNAPS[nextIndex];
+      setMobileHeight(next);
+      onMobileHeightChange(next);
       return;
     }
 
@@ -197,8 +209,10 @@ export function ReaderPane({ children, open, onClose, onOpen }: Props) {
 
   const resetSize = () => {
     if (!open) onOpen();
-    if (compact) setMobileHeight(65);
-    else {
+    if (compact) {
+      setMobileHeight(65);
+      onMobileHeightChange(65);
+    } else {
       const next = clampReaderWidth(READER_WIDTH.default, window.innerWidth);
       setWidth(next);
       saveWidth(next);

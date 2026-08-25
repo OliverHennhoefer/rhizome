@@ -8,7 +8,11 @@ interface Props {
   focus: boolean;
   direction: "in" | "out" | "both";
   depth: number;
+  pinAvailable: boolean;
+  pinned: boolean;
+  showPinAction: boolean;
   onClose: () => void;
+  onPinnedChange: (pinned: boolean) => void;
   onSelect: (id: string) => void;
   onToggleFocus: (direction: "in" | "out") => void;
   onDepthChange: (depth: number) => void;
@@ -214,7 +218,11 @@ export function Reader({
   focus,
   direction,
   depth,
+  pinAvailable,
+  pinned,
+  showPinAction,
   onClose,
+  onPinnedChange,
   onSelect,
   onToggleFocus,
   onDepthChange,
@@ -263,6 +271,18 @@ export function Reader({
           <h2>{node.title}</h2>
           {node.path && <p className="node-path">{node.path}</p>}
         </div>
+        {showPinAction && (
+          <button
+            aria-label={pinned ? "Unpin node" : "Pin node"}
+            aria-pressed={pinned}
+            className="mobile-pin-action"
+            disabled={!pinAvailable}
+            onClick={() => onPinnedChange(!pinned)}
+            type="button"
+          >
+            {pinned ? "Unpin" : "Pin"}
+          </button>
+        )}
         <button aria-label="Close reader" className="close-reader" onClick={onClose} type="button">
           ×
         </button>

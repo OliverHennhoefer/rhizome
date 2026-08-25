@@ -6,6 +6,30 @@ async function searchNotes(page: Page, query: string): Promise<void> {
   await page.getByLabel("Search notes").fill(query);
 }
 
+async function searchNotesWithTouch(page: Page, query: string): Promise<void> {
+  const filters = page.getByRole("button", { name: "Filters" });
+  if ((await filters.getAttribute("aria-expanded")) !== "true") await filters.tap();
+  await page.getByLabel("Search notes").fill(query);
+}
+
+async function dragTouch(
+  page: Page,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+): Promise<void> {
+  const session = await page.context().newCDPSession(page);
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ ...from, radiusX: 6, radiusY: 6 }],
+  });
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchMove",
+    touchPoints: [{ ...to, radiusX: 6, radiusY: 6 }],
+  });
+  await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await session.detach();
+}
+
 async function findEmptyGraphPoint(page: Page, graph: Locator): Promise<{ x: number; y: number }> {
   const bounds = await graph.boundingBox();
   if (!bounds) throw new Error("Graph viewport is not visible.");
@@ -742,6 +766,80 @@ test("mobile retains search and reader navigation", async ({ page }, testInfo) =
   await expect(separator).toHaveAttribute("aria-valuenow", "65");
 });
 
+test("mobile touch opens, emphasizes, drags, and pins nodes", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-reader", "mobile project only");
+  test.setTimeout(75_000);
+  await page.goto("?note=Language%2FSubword%20tokenization");
+  const graph = page.getByTestId("graph-2d");
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
+  await expect(graph).toHaveAttribute("data-emphasis-source", "selection");
+  await expect(graph).toHaveAttribute("data-emphasized-node", "Language/Subword tokenization");
+  await expect
+    .poll(async () => Number(await graph.getAttribute("data-selected-viewport-y")))
+    .toBeLessThan(844 * 0.35);
+
+  const pin = page.getByRole("button", { name: "Pin node" });
+  await expect(pin).toBeVisible();
+  await pin.tap();
+  await expect(page.getByRole("button", { name: "Unpin node" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(graph).toHaveAttribute("data-pinned-count", "1");
+  await page.getByRole("button", { name: "Unpin node" }).tap();
+  await expect(graph).toHaveAttribute("data-pinned-count", "0");
+  await page.getByRole("button", { name: "Pin node" }).tap();
+  await expect(graph).toHaveAttribute("data-pinned-count", "1");
+
+  await page.getByRole("button", { name: "Close reader" }).tap();
+  await expect(page.getByTestId("reader")).toHaveCount(0);
+  const selectedCenter = {
+    x: Number(await graph.getAttribute("data-selected-viewport-x")),
+    y: Number(await graph.getAttribute("data-selected-viewport-y")),
+  };
+  expect(selectedCenter.y).toBeLessThan(844 * 0.35);
+  await dragTouch(page, selectedCenter, { x: 201, y: 152 });
+  await expect(page.getByTestId("reader")).toBeVisible();
+
+  await page.getByRole("button", { name: "Close reader" }).tap();
+  await dragTouch(page, selectedCenter, { x: 230, y: 148 });
+  await expect(page.getByTestId("reader")).toHaveCount(0);
+  await expect(graph).toHaveAttribute("data-pinned-count", "1");
+
+  await searchNotesWithTouch(page, "adamw");
+  await page.getByRole("button", { name: /AdamW/ }).tap();
+  await expect(page.getByRole("button", { name: "Pin node" })).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
+  await searchNotesWithTouch(page, "subword tokenization");
+  await page.getByRole("button", { name: /Subword tokenization/ }).tap();
+  await expect(page.getByRole("button", { name: "Unpin node" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await page.getByRole("button", { name: "Overview" }).tap();
+  await expect(graph).toHaveAttribute("data-pinned-count", "0");
+});
+
+test("mobile touch retains graph controls and directional navigation", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-reader", "mobile project only");
+  await page.goto("");
+  await page.getByRole("button", { name: "Filters" }).tap();
+  const backTrace = page.getByRole("region", { name: "Back trace" });
+  await backTrace.getByRole("button", { name: "Activate" }).tap();
+  await page.getByRole("button", { name: "Open a random visible note" }).tap();
+  await expect(page.getByTestId("reader")).toBeVisible();
+  await expect(page.getByTestId("graph-2d")).toHaveAttribute("data-back-trace-node-count", "1");
+  await page.getByRole("button", { name: "What depends on this?" }).tap();
+  await expect(page).toHaveURL(/focus=1/);
+  await expect(page.getByRole("region", { name: "Active graph focus" })).toBeVisible();
+  await page.getByRole("button", { name: "Overview" }).tap();
+  await expect(page).not.toHaveURL(/focus=1/);
+});
+
 test("matches the mobile reader chrome", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-reader", "mobile project only");
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -749,7 +847,8 @@ test("matches the mobile reader chrome", async ({ page }, testInfo) => {
   await expect(page.getByTestId("graph-2d")).toBeVisible();
   await expect(page.getByTestId("reader")).toBeVisible();
   await page.addStyleTag({
-    content: ".graph-canvas canvas { visibility: hidden !important; }",
+    content:
+      ".graph-canvas canvas { visibility: hidden !important; } .mobile-pin-action { display: none !important; }",
   });
   await expect(page).toHaveScreenshot("mobile-reader.png", {
     animations: "disabled",

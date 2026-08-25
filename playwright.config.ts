@@ -17,18 +17,21 @@ export default defineConfig({
       name: "mobile-reader",
       use: {
         baseURL: "http://127.0.0.1:4173/",
+        hasTouch: true,
+        isMobile: true,
         viewport: { width: 390, height: 844 },
       },
     },
   ],
   webServer: [
     {
-      command: "npm run dev -- --host 127.0.0.1 --port 4173",
+      command: "node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 4173",
       url: "http://127.0.0.1:4173/",
       reuseExistingServer: !process.env.CI,
     },
     {
-      command: "RHIZOME_BASE_PATH=/repository/ npm run dev -- --host 127.0.0.1 --port 4174",
+      command:
+        "node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 4174 --base /repository/",
       url: "http://127.0.0.1:4174/repository/",
       reuseExistingServer: !process.env.CI,
     },

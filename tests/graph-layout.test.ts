@@ -23,6 +23,7 @@ import {
   physicalLinkStrength,
   projectionBaseBounds,
   releaseVelocityRetention,
+  resolveMotionPolicy,
 } from "../src/app/graph-layout";
 import { blendGraphTone, nodeTone, relationTone } from "../src/app/graph-theme";
 import type { GraphManifest } from "../src/shared/contracts";
@@ -348,6 +349,21 @@ describe("motion policy and position state", () => {
     ).toBe(false);
   });
 
+  it("uses adaptive motion only for touch projections above compact limits", () => {
+    const medium = projection(
+      Array.from({ length: 201 }, (_, index) => `n-${index}`),
+      [],
+    );
+    const oversized = projection(
+      Array.from({ length: 601 }, (_, index) => `n-${index}`),
+      [],
+    );
+    expect(resolveMotionPolicy(medium, true, false)).toBe("static");
+    expect(resolveMotionPolicy(medium, true, true)).toBe("adaptive");
+    expect(resolveMotionPolicy(medium, false, false)).toBe("full");
+    expect(resolveMotionPolicy(oversized, true, true)).toBe("static");
+  });
+
   it("resets positions and pins to immutable compiler coordinates", () => {
     const source = createGraph(manifest);
     const positions = new GraphPositionStore(source);
@@ -417,6 +433,27 @@ describe("motion policy and position state", () => {
     controller.endDrag("a", false);
     controller.pause();
     expect(positions.isPinned("a")).toBe(false);
+    controller.kill();
+  });
+
+  it("supports explicit session pin commands without reheating motion", async () => {
+    const source = createGraph(manifest);
+    const positions = new GraphPositionStore(source);
+    const display = createDisplayGraph(source, projection(["a", "b"], ["ab-link"]), positions);
+    const statuses: string[] = [];
+    const controller = new GraphMotionController({
+      graph: display,
+      positions,
+      onStatus: (status) => statuses.push(status),
+      onPinnedChange: () => undefined,
+    });
+    await controller.start(true);
+    controller.setPinned("a", true);
+    expect(positions.isPinned("a")).toBe(true);
+    expect(positions.getPinnedIds()).toEqual(new Set(["a"]));
+    controller.setPinned("a", false);
+    expect(positions.isPinned("a")).toBe(false);
+    expect(statuses.at(-1)).toBe("settled");
     controller.kill();
   });
 

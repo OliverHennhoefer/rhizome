@@ -110,6 +110,32 @@
   cursor: pointer;
 }
 
+.mobile-pin-action {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  min-width: 48px;
+  height: 29px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--secondary);
+  background: var(--surface);
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.mobile-pin-action:hover:not(:disabled),
+.mobile-pin-action[aria-pressed="true"] {
+  border-color: var(--line-strong);
+  color: var(--background);
+  background: var(--text);
+}
+
+.mobile-pin-action:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
 .close-reader:hover {
   color: var(--text);
   background: var(--surface-hover);

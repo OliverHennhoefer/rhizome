@@ -15,6 +15,15 @@ import {
 } from "./graph";
 import { closestNodeAtPoint, type NodeHitArea } from "./graph-hit-testing";
 import {
+  ADAPTIVE_MOTION_SETTINGS,
+  dragThreshold,
+  effectiveGraphEmphasis,
+  type GraphEmphasisState,
+  sameGraphEmphasis,
+  selectionViewportPoint,
+  shouldLimitAdaptiveMotion,
+} from "./graph-interaction";
+import {
   hoverTransitionProgress,
   interpolateHoverValue,
   type LabelZoomStyle,
@@ -25,11 +34,12 @@ import {
   createDisplayGraph,
   GraphMotionController,
   GraphPositionStore,
-  isMotionEligible,
   type LayoutStatus,
+  type MotionPolicy,
   nodeColorWithAlpha,
   nodeRadius,
   projectionBaseBounds,
+  resolveMotionPolicy,
 } from "./graph-layout";
 import { backTraceNodeTone, blendGraphTone, nodeTone, relationTone } from "./graph-theme";
 
@@ -40,6 +50,10 @@ export interface GraphViewportSnapshot {
   focus: boolean;
   motionEnabled: boolean;
   compact: boolean;
+  touchMode: boolean;
+  readerOpen: boolean;
+  readerCompact: boolean;
+  mobileReaderHeight: number;
   reducedMotion: boolean;
   searchMatches?: ReadonlySet<string>;
   onSelect: (id: string) => void;
@@ -48,7 +62,7 @@ export interface GraphViewportSnapshot {
 
 interface GraphViewportEvents {
   onStatus: (status: LayoutStatus) => void;
-  onPinnedCount: (count: number) => void;
+  onPinnedChange: (pinned: ReadonlySet<string>) => void;
 }
 
 interface DragState {
@@ -60,14 +74,9 @@ interface DragState {
   startY: number;
 }
 
-interface HoverVisualState {
-  hovered?: string;
-  neighbors: ReadonlySet<string>;
-}
-
 interface HoverTransition {
-  from: HoverVisualState;
-  to: HoverVisualState;
+  from: GraphEmphasisState;
+  to: GraphEmphasisState;
   startedAt: number;
   progress: number;
 }
@@ -94,6 +103,11 @@ export class GraphViewportSession {
   private snapshot?: GraphViewportSnapshot;
   private motion?: GraphMotionController;
   private motionFrame?: number;
+  private adaptiveFrame?: number;
+  private adaptiveLastTimestamp?: number;
+  private adaptiveWarmupFrames = 0;
+  private adaptiveDurations: number[] = [];
+  private performanceLimitedProjection?: GraphProjection;
   private cameraFrame?: number;
   private hoverFrame?: number;
   private hoverTransitionFrame?: number;
@@ -121,6 +135,7 @@ export class GraphViewportSession {
 
     const drawHover: NodeHoverDrawingFunction<GraphNode, RuntimeGraphEdge> = (context, data) => {
       const key = (data as typeof data & { key?: string }).key;
+      const emphasisRoot = this.currentEmphasisState().root;
       if (key && this.positions.isPinned(key)) {
         context.beginPath();
         context.arc(data.x, data.y, data.size + 4, 0, Math.PI * 2);
@@ -135,7 +150,7 @@ export class GraphViewportSession {
         context.lineWidth = 1.5;
         context.stroke();
       }
-      if (key === this.hovered) {
+      if (key === emphasisRoot) {
         context.beginPath();
         context.arc(data.x, data.y, data.size + 5, 0, Math.PI * 2);
         context.strokeStyle = "#f5f5f7";
@@ -207,6 +222,7 @@ export class GraphViewportSession {
     const isSelected = node === this.selected;
     const isSelectedNeighbor = this.selectedNeighbors.has(node);
     const isHovered = node === this.hovered;
+    const isEmphasisRoot = node === this.currentEmphasisState().root;
     const isPinned = this.positions.isPinned(node);
     const isSearchMatch = this.searchMatches?.has(node) ?? false;
     const searchRelated = !this.searchMatches || isSearchMatch;
@@ -231,13 +247,13 @@ export class GraphViewportSession {
       zIndex:
         isSelected || isHovered ? 4 : isPinned || isSearchMatch ? 3 : isSelectedNeighbor ? 2 : 1,
       forceLabel: true,
-      highlighted: isPinned || isHovered || (isSelected && isStained),
+      highlighted: isPinned || isEmphasisRoot || (isSelected && isStained),
     };
   }
 
   private reduceEdge(data: RuntimeGraphEdge) {
     const transition = this.hoverTransition;
-    const from = this.edgeVisualStyle(data, transition?.from ?? this.currentHoverVisualState());
+    const from = this.edgeVisualStyle(data, transition?.from ?? this.currentEmphasisState());
     if (!transition) {
       return {
         ...data,
@@ -259,45 +275,53 @@ export class GraphViewportSession {
     };
   }
 
-  private edgeVisualStyle(data: RuntimeGraphEdge, hover: HoverVisualState): EdgeVisualStyle {
+  private edgeVisualStyle(data: RuntimeGraphEdge, emphasis: GraphEmphasisState): EdgeVisualStyle {
     const selectedActive =
       this.selected && (data.source === this.selected || data.target === this.selected);
     const searchActive =
       this.searchMatches?.has(data.source) && this.searchMatches.has(data.target);
-    const hoverActive =
-      hover.hovered && (data.source === hover.hovered || data.target === hover.hovered);
-    const active = hover.hovered ? hoverActive : this.searchMatches ? searchActive : selectedActive;
+    const emphasisActive =
+      emphasis.root && (data.source === emphasis.root || data.target === emphasis.root);
+    const active = emphasis.root
+      ? emphasisActive
+      : this.searchMatches
+        ? searchActive
+        : selectedActive;
     return {
-      tone: active ? 1 : hover.hovered || this.searchMatches ? 0.1 : 0.24,
-      size: active ? 1.7 : hover.hovered || this.searchMatches ? 0.3 : 0.42,
+      tone: active ? 1 : emphasis.root || this.searchMatches ? 0.1 : 0.24,
+      size: active ? 1.7 : emphasis.root || this.searchMatches ? 0.3 : 0.42,
       zIndex: active ? 2 : 1,
     };
   }
 
-  private currentHoverVisualState(): HoverVisualState {
-    return { hovered: this.hovered, neighbors: this.hoverNeighbors };
+  private currentEmphasisState(): GraphEmphasisState {
+    return effectiveGraphEmphasis(
+      { root: this.hovered, neighbors: this.hoverNeighbors },
+      { root: this.selected, neighbors: this.selectedNeighbors },
+      this.snapshot?.touchMode ?? false,
+    );
   }
 
-  private hoverStateRelevance(node: string, state: HoverVisualState): number {
-    return !state.hovered || node === state.hovered || state.neighbors.has(node) ? 1 : 0;
+  private emphasisRelevance(node: string, state: GraphEmphasisState): number {
+    return !state.root || node === state.root || state.neighbors.has(node) ? 1 : 0;
   }
 
   private hoverRelevance(node: string): number {
     const transition = this.hoverTransition;
-    if (!transition) return this.hoverStateRelevance(node, this.currentHoverVisualState());
+    if (!transition) return this.emphasisRelevance(node, this.currentEmphasisState());
     return interpolateHoverValue(
-      this.hoverStateRelevance(node, transition.from),
-      this.hoverStateRelevance(node, transition.to),
+      this.emphasisRelevance(node, transition.from),
+      this.emphasisRelevance(node, transition.to),
       transition.progress,
     );
   }
 
   private hoverEmphasis(node: string): number {
     const transition = this.hoverTransition;
-    if (!transition) return node === this.hovered ? 1 : 0;
+    if (!transition) return node === this.currentEmphasisState().root ? 1 : 0;
     return interpolateHoverValue(
-      node === transition.from.hovered ? 1 : 0,
-      node === transition.to.hovered ? 1 : 0,
+      node === transition.from.root ? 1 : 0,
+      node === transition.to.root ? 1 : 0,
       transition.progress,
     );
   }
@@ -319,7 +343,19 @@ export class GraphViewportSession {
   private readonly handleCameraUpdate = (state: { ratio: number }): void => {
     this.container.setAttribute("data-camera-ratio", state.ratio.toFixed(4));
     this.applyLabelZoom(state.ratio);
+    this.writeSelectedViewportPosition();
   };
+
+  private writeSelectedViewportPosition(): void {
+    if (!this.selected || !this.displayGraph.hasNode(this.selected)) {
+      this.container.removeAttribute("data-selected-viewport-x");
+      this.container.removeAttribute("data-selected-viewport-y");
+      return;
+    }
+    const position = this.renderer.graphToViewport(this.positions.getCurrent(this.selected));
+    this.container.setAttribute("data-selected-viewport-x", position.x.toFixed(2));
+    this.container.setAttribute("data-selected-viewport-y", position.y.toFixed(2));
+  }
 
   private bindInteractions(): void {
     this.renderer.on("downNode", ({ node, event, preventSigmaDefault }) => {
@@ -453,7 +489,9 @@ export class GraphViewportSession {
     if (!drag || !this.displayGraph.hasNode(drag.id)) return;
     point.preventSigmaDefault();
     if (!drag.moved) {
-      if (Math.hypot(point.x - drag.startX, point.y - drag.startY) <= 4) return;
+      if (Math.hypot(point.x - drag.startX, point.y - drag.startY) <= dragThreshold(drag.touch)) {
+        return;
+      }
       drag.moved = true;
       this.motion?.beginDrag(drag.id, this.positions.getCurrent(drag.id));
     }
@@ -469,12 +507,14 @@ export class GraphViewportSession {
     const drag = this.drag;
     if (!drag) return;
     if (drag.moved) {
-      const keepPinned = !drag.touch && original instanceof MouseEvent && original.shiftKey;
+      const keepPinned = drag.touch
+        ? drag.wasPinned
+        : original instanceof MouseEvent && original.shiftKey;
       if (this.motion) this.motion.endDrag(drag.id, keepPinned);
       else {
         if (keepPinned) this.positions.pin(drag.id);
         else this.positions.release(drag.id);
-        this.emitPinnedCount();
+        this.emitPinnedState();
       }
     }
     if (drag.moved) this.suppressClickUntil = performance.now() + 300;
@@ -506,15 +546,19 @@ export class GraphViewportSession {
     });
   }
 
-  private startHoverTransition(from: HoverVisualState, to: HoverVisualState): void {
+  private startHoverTransition(from: GraphEmphasisState, to: GraphEmphasisState): void {
     this.cancelHoverTransition();
+    if (sameGraphEmphasis(from, to)) {
+      this.renderer.refresh();
+      return;
+    }
     if (this.snapshot?.reducedMotion) {
       this.renderer.refresh();
       return;
     }
     this.hoverTransition = {
-      from: { hovered: from.hovered, neighbors: new Set(from.neighbors) },
-      to: { hovered: to.hovered, neighbors: new Set(to.neighbors) },
+      from: { root: from.root, neighbors: new Set(from.neighbors) },
+      to: { root: to.root, neighbors: new Set(to.neighbors) },
       startedAt: performance.now(),
       progress: 0,
     };
@@ -529,35 +573,47 @@ export class GraphViewportSession {
     else this.positions.release(drag.id);
     this.drag = undefined;
     this.renderer.getCamera().enable();
-    this.emitPinnedCount();
+    this.emitPinnedState();
   }
 
   private setHover(node: string): void {
     if (this.hovered === node) return;
-    const previous = this.currentHoverVisualState();
+    const previous = this.currentEmphasisState();
     this.hovered = node;
     this.hoverNeighbors = neighborsOf(this.displayGraph, node);
     this.writeHoverAttributes();
-    this.startHoverTransition(previous, this.currentHoverVisualState());
+    this.writeEmphasisAttributes();
+    this.startHoverTransition(previous, this.currentEmphasisState());
   }
 
   private clearHover(): void {
     if (!this.hovered) return;
-    const previous = {
-      hovered: this.hovered,
-      neighbors: new Set(this.hoverNeighbors),
-    };
+    const previous = this.currentEmphasisState();
     this.hovered = undefined;
     this.hoverNeighbors.clear();
     this.container.removeAttribute("data-hovered-node");
     this.container.removeAttribute("data-hovered-neighbor-count");
-    this.startHoverTransition(previous, this.currentHoverVisualState());
+    this.container.removeAttribute("data-emphasized-node");
+    this.container.removeAttribute("data-emphasis-source");
+    this.writeEmphasisAttributes();
+    this.startHoverTransition(previous, this.currentEmphasisState());
   }
 
   private writeHoverAttributes(): void {
     if (!this.hovered) return;
     this.container.setAttribute("data-hovered-node", this.hovered);
     this.container.setAttribute("data-hovered-neighbor-count", String(this.hoverNeighbors.size));
+  }
+
+  private writeEmphasisAttributes(): void {
+    const emphasis = this.currentEmphasisState();
+    if (!emphasis.root) {
+      this.container.removeAttribute("data-emphasized-node");
+      this.container.removeAttribute("data-emphasis-source");
+      return;
+    }
+    this.container.setAttribute("data-emphasized-node", emphasis.root);
+    this.container.setAttribute("data-emphasis-source", this.hovered ? "hover" : "selection");
   }
 
   private reconcileHover(nextGraph: RhizomeGraph): void {
@@ -568,9 +624,11 @@ export class GraphViewportSession {
     if (!this.hovered) {
       this.container.removeAttribute("data-hovered-node");
       this.container.removeAttribute("data-hovered-neighbor-count");
+      this.writeEmphasisAttributes();
       return;
     }
     this.writeHoverAttributes();
+    this.writeEmphasisAttributes();
   }
 
   private installDisplayGraph(projection: GraphProjection): void {
@@ -596,45 +654,128 @@ export class GraphViewportSession {
   }
 
   private stopMotion(): void {
+    this.stopAdaptiveMonitor();
     if (this.motionFrame !== undefined) cancelAnimationFrame(this.motionFrame);
     this.motionFrame = undefined;
     this.motion?.kill();
     this.motion = undefined;
   }
 
+  private stopAdaptiveMonitor(): void {
+    if (this.adaptiveFrame !== undefined) cancelAnimationFrame(this.adaptiveFrame);
+    this.adaptiveFrame = undefined;
+    this.adaptiveLastTimestamp = undefined;
+    this.adaptiveWarmupFrames = 0;
+    this.adaptiveDurations = [];
+  }
+
+  private startAdaptiveMonitor(): void {
+    this.stopAdaptiveMonitor();
+    const sample = (timestamp: number) => {
+      this.adaptiveFrame = undefined;
+      const snapshot = this.snapshot;
+      const motion = this.motion;
+      if (!snapshot || !motion || this.destroyed) return;
+      if (document.visibilityState !== "visible" || motion.interacting) {
+        this.adaptiveLastTimestamp = undefined;
+        this.adaptiveWarmupFrames = 0;
+        this.adaptiveDurations = [];
+      } else if (this.adaptiveLastTimestamp === undefined) {
+        this.adaptiveLastTimestamp = timestamp;
+      } else {
+        const duration = timestamp - this.adaptiveLastTimestamp;
+        this.adaptiveLastTimestamp = timestamp;
+        if (this.adaptiveWarmupFrames < ADAPTIVE_MOTION_SETTINGS.warmupFrames) {
+          this.adaptiveWarmupFrames += 1;
+        } else {
+          this.adaptiveDurations.push(duration);
+          if (this.adaptiveDurations.length > ADAPTIVE_MOTION_SETTINGS.windowFrames) {
+            this.adaptiveDurations.shift();
+          }
+          if (shouldLimitAdaptiveMotion(this.adaptiveDurations)) {
+            this.performanceLimitedProjection = snapshot.projection;
+            this.stopMotion();
+            this.container.setAttribute("data-motion-policy", "performance-limited");
+            this.emitStatus("static");
+            return;
+          }
+        }
+      }
+      this.adaptiveFrame = requestAnimationFrame(sample);
+    };
+    this.adaptiveFrame = requestAnimationFrame(sample);
+  }
+
+  private motionPolicy(snapshot: GraphViewportSnapshot): MotionPolicy {
+    if (this.performanceLimitedProjection === snapshot.projection) return "static";
+    return resolveMotionPolicy(snapshot.projection, snapshot.compact, snapshot.touchMode);
+  }
+
   private startMotion(settled = false): void {
     const snapshot = this.snapshot;
     if (!snapshot) return;
     if (snapshot.projection.nodes.size <= 1) {
+      this.container.setAttribute("data-motion-policy", "full");
       this.emitStatus("settled");
       return;
     }
-    if (!isMotionEligible(snapshot.projection, snapshot.compact)) {
+    const policy = this.motionPolicy(snapshot);
+    if (policy === "static") {
+      this.container.setAttribute(
+        "data-motion-policy",
+        this.performanceLimitedProjection === snapshot.projection
+          ? "performance-limited"
+          : "size-limited",
+      );
       this.emitStatus("static");
       return;
     }
     if (!snapshot.motionEnabled) {
+      this.container.setAttribute("data-motion-policy", "paused");
       this.emitStatus("paused");
       return;
     }
+    this.container.setAttribute("data-motion-policy", policy);
 
     const motion = new GraphMotionController({
       graph: this.displayGraph,
       positions: this.positions,
-      onStatus: (status) => this.emitStatus(status),
+      onStatus: (status) => {
+        this.emitStatus(status);
+        if (status === "settled") {
+          this.stopAdaptiveMonitor();
+          const current = this.snapshot;
+          if (
+            current?.touchMode &&
+            current.readerOpen &&
+            current.readerCompact &&
+            current.selected &&
+            this.displayGraph.hasNode(current.selected)
+          ) {
+            this.centerSelection(current.selected);
+          }
+        }
+      },
       onPinnedChange: () => {
-        this.emitPinnedCount();
+        this.emitPinnedState();
         this.renderer.refresh();
       },
     });
     this.motion = motion;
     this.motionFrame = requestAnimationFrame(() => {
       this.motionFrame = undefined;
-      void motion.start(settled).catch((error: unknown) => {
-        if (this.destroyed || this.motion !== motion) return;
-        console.error("Rhizome motion could not start", error);
-        this.emitStatus("paused");
-      });
+      void motion
+        .start(settled)
+        .then(() => {
+          if (!settled && policy === "adaptive" && !this.destroyed && this.motion === motion) {
+            this.startAdaptiveMonitor();
+          }
+        })
+        .catch((error: unknown) => {
+          if (this.destroyed || this.motion !== motion) return;
+          console.error("Rhizome motion could not start", error);
+          this.emitStatus("paused");
+        });
     });
   }
 
@@ -642,8 +783,8 @@ export class GraphViewportSession {
     if (!this.destroyed) this.events.onStatus(status);
   }
 
-  private emitPinnedCount(): void {
-    if (!this.destroyed) this.events.onPinnedCount(this.positions.pinnedCount);
+  private emitPinnedState(): void {
+    if (!this.destroyed) this.events.onPinnedChange(this.positions.getPinnedIds());
   }
 
   private animateCamera(target: {
@@ -658,6 +799,20 @@ export class GraphViewportSession {
       return Promise.resolve();
     }
     return camera.animate(target, { duration: 280, easing: "quadraticInOut" });
+  }
+
+  private selectionViewportCenter(): { x: number; y: number } | undefined {
+    const snapshot = this.snapshot;
+    if (!snapshot) return undefined;
+    const dimensions = this.renderer.getDimensions();
+    return selectionViewportPoint({
+      width: dimensions.width,
+      height: dimensions.height,
+      touchMode: snapshot.touchMode,
+      readerOpen: snapshot.readerOpen,
+      readerCompact: snapshot.readerCompact,
+      mobileReaderHeight: snapshot.mobileReaderHeight,
+    });
   }
 
   private scheduleCenterCorrection(id: string, operation: number, attempts = 3): void {
@@ -675,8 +830,8 @@ export class GraphViewportSession {
       }
       const camera = this.renderer.getCamera();
       const cameraState = camera.getState();
-      const dimensions = this.renderer.getDimensions();
-      const viewportCenter = { x: dimensions.width / 2, y: dimensions.height / 2 };
+      const viewportCenter = this.selectionViewportCenter();
+      if (!viewportCenter) return;
       const nodeViewport = this.renderer.graphToViewport(this.positions.getCurrent(id));
       if (Math.hypot(nodeViewport.x - viewportCenter.x, nodeViewport.y - viewportCenter.y) <= 1) {
         return;
@@ -704,17 +859,17 @@ export class GraphViewportSession {
       const viewportPosition = this.renderer.graphToViewport(this.positions.getCurrent(id), {
         cameraState: provisionalState,
       });
-      const dimensions = this.renderer.getDimensions();
+      const viewportCenter = this.selectionViewportCenter();
+      if (!viewportCenter) return;
       const nodePosition = this.renderer.viewportToFramedGraph(viewportPosition, {
         cameraState: provisionalState,
       });
-      const viewportCenter = this.renderer.viewportToFramedGraph(
-        { x: dimensions.width / 2, y: dimensions.height / 2 },
-        { cameraState: provisionalState },
-      );
+      const centerPosition = this.renderer.viewportToFramedGraph(viewportCenter, {
+        cameraState: provisionalState,
+      });
       const target = {
-        x: provisionalState.x + nodePosition.x - viewportCenter.x,
-        y: provisionalState.y + nodePosition.y - viewportCenter.y,
+        x: provisionalState.x + nodePosition.x - centerPosition.x,
+        y: provisionalState.y + nodePosition.y - centerPosition.y,
         ratio,
       };
       void this.animateCamera(target).then(() => this.scheduleCenterCorrection(id, operation));
@@ -724,19 +879,18 @@ export class GraphViewportSession {
   sync(next: GraphViewportSnapshot): void {
     if (this.destroyed) return;
     const previous = this.snapshot;
+    const previousEmphasis = this.currentEmphasisState();
     const projectionChanged = !previous || previous.projection !== next.projection;
     const selectionChanged = previous?.selected !== next.selected;
+    const touchModeChanged = previous?.touchMode !== next.touchMode;
     const focusChanged = previous?.focus !== next.focus;
     const searchChanged = previous?.searchMatches !== next.searchMatches;
     const backTraceChanged = previous?.backTraceVisits !== next.backTraceVisits;
-    const previousEligible = previous
-      ? isMotionEligible(previous.projection, previous.compact)
-      : undefined;
-    const nextEligible = isMotionEligible(next.projection, next.compact);
+    const previousPolicy = previous ? this.motionPolicy(previous) : undefined;
+    const nextPolicy = this.motionPolicy(next);
+    const nextEligible = nextPolicy !== "static";
     const motionPolicyChanged =
-      !previous ||
-      previous.motionEnabled !== next.motionEnabled ||
-      previousEligible !== nextEligible;
+      !previous || previous.motionEnabled !== next.motionEnabled || previousPolicy !== nextPolicy;
 
     this.snapshot = next;
     this.selected = next.selected;
@@ -761,6 +915,11 @@ export class GraphViewportSession {
           ? neighborsOf(this.displayGraph, next.selected)
           : new Set<string>();
     }
+    this.writeEmphasisAttributes();
+    this.writeSelectedViewportPosition();
+    if (previous && (projectionChanged || selectionChanged || touchModeChanged)) {
+      this.startHoverTransition(previousEmphasis, this.currentEmphasisState());
+    }
 
     if (this.renderer.getSetting("hideEdgesOnMove") === nextEligible) {
       this.renderer.setSetting("hideEdgesOnMove", !nextEligible);
@@ -773,12 +932,36 @@ export class GraphViewportSession {
 
     if (
       !projectionChanged &&
-      (selectionChanged || focusChanged || searchChanged || backTraceChanged)
+      (selectionChanged || touchModeChanged || focusChanged || searchChanged || backTraceChanged)
     ) {
       this.renderer.refresh();
     }
-    if (previous && selectionChanged && next.selected && this.displayGraph.hasNode(next.selected)) {
+    const readerOpened = Boolean(previous && !previous.readerOpen && next.readerOpen);
+    const readerGrew = Boolean(
+      previous?.readerOpen &&
+        next.readerOpen &&
+        next.mobileReaderHeight > previous.mobileReaderHeight,
+    );
+    const initialTouchSelection = !previous && next.touchMode && next.readerOpen;
+    if (
+      next.selected &&
+      this.displayGraph.hasNode(next.selected) &&
+      ((previous && selectionChanged) ||
+        initialTouchSelection ||
+        (next.touchMode && next.readerCompact && (readerOpened || readerGrew)))
+    ) {
       this.centerSelection(next.selected);
+    }
+  }
+
+  setPinned(id: string, pinned: boolean): void {
+    if (this.destroyed || !this.displayGraph.hasNode(id)) return;
+    if (this.motion) this.motion.setPinned(id, pinned);
+    else {
+      if (pinned) this.positions.pin(id);
+      else this.positions.release(id);
+      this.emitPinnedState();
+      this.renderer.refresh();
     }
   }
 
@@ -789,7 +972,7 @@ export class GraphViewportSession {
     this.cancelDrag();
     this.cancelHoverTransition();
     this.positions.reset();
-    this.emitPinnedCount();
+    this.emitPinnedState();
     this.installDisplayGraph(snapshot.projection);
     this.cameraOperation += 1;
     if (this.cameraFrame !== undefined) cancelAnimationFrame(this.cameraFrame);
@@ -801,6 +984,16 @@ export class GraphViewportSession {
   resize(): void {
     if (this.destroyed) return;
     this.renderer.resize(true).scheduleRender();
+    const snapshot = this.snapshot;
+    if (
+      snapshot?.touchMode &&
+      snapshot.readerOpen &&
+      snapshot.readerCompact &&
+      snapshot.selected &&
+      this.displayGraph.hasNode(snapshot.selected)
+    ) {
+      this.centerSelection(snapshot.selected);
+    }
   }
 
   destroy(): void {
@@ -820,6 +1013,8 @@ export class GraphViewportSession {
     this.searchMatches = undefined;
     this.container.removeAttribute("data-hovered-node");
     this.container.removeAttribute("data-hovered-neighbor-count");
+    this.container.removeAttribute("data-emphasized-node");
+    this.container.removeAttribute("data-emphasis-source");
     this.container.removeAttribute("data-search-match-count");
     this.container.removeAttribute("data-back-trace-node-count");
     this.container.removeAttribute("data-back-trace-selected-visits");
@@ -828,6 +1023,9 @@ export class GraphViewportSession {
     this.container.removeAttribute("data-label-visibility");
     this.container.removeAttribute("data-label-opacity");
     this.container.removeAttribute("data-label-size");
+    this.container.removeAttribute("data-motion-policy");
+    this.container.removeAttribute("data-selected-viewport-x");
+    this.container.removeAttribute("data-selected-viewport-y");
     this.renderer.kill();
   }
 }

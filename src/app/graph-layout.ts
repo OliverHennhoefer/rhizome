@@ -11,6 +11,7 @@ import type { GraphNode } from "../shared/contracts";
 import type { GraphProjection, RhizomeGraph } from "./graph";
 
 export type LayoutStatus = "loading" | "running" | "settled" | "paused" | "static";
+export type MotionPolicy = "full" | "adaptive" | "static";
 
 export interface Position {
   x: number;
@@ -175,6 +176,12 @@ export class GraphPositionStore {
     return this.pins;
   }
 
+  getPinnedIds(): ReadonlySet<string> {
+    return new Set(
+      [...this.nodes.entries()].filter(([, stored]) => stored.pinned).map(([id]) => id),
+    );
+  }
+
   reset(): void {
     for (const stored of this.nodes.values()) {
       stored.current = { ...stored.base };
@@ -195,6 +202,23 @@ export function isMotionEligible(projection: GraphProjection, compact: boolean):
     projection.nodes.size <= limits.nodes &&
     projection.edges.size <= limits.edges
   );
+}
+
+export function resolveMotionPolicy(
+  projection: GraphProjection,
+  compact: boolean,
+  touchMode: boolean,
+): MotionPolicy {
+  if (isMotionEligible(projection, compact)) return "full";
+  if (
+    touchMode &&
+    projection.nodes.size > 1 &&
+    projection.nodes.size <= DESKTOP_MOTION_LIMITS.nodes &&
+    projection.edges.size <= DESKTOP_MOTION_LIMITS.edges
+  ) {
+    return "adaptive";
+  }
+  return "static";
 }
 
 export function projectionBaseBounds(
@@ -370,6 +394,10 @@ export class GraphMotionController {
     this.positions = options.positions;
     this.onStatus = options.onStatus;
     this.onPinnedChange = options.onPinnedChange;
+  }
+
+  get interacting(): boolean {
+    return Boolean(this.activeDrag || this.releaseNode);
   }
 
   async start(settled = false): Promise<void> {
@@ -708,6 +736,26 @@ export class GraphMotionController {
         .restart();
       this.onStatus("running");
     }
+  }
+
+  setPinned(id: string, pinned: boolean): void {
+    if (!this.graph.hasNode(id)) return;
+    const node = this.nodes.get(id);
+    const position = this.positions.getCurrent(id);
+    if (pinned) {
+      this.positions.pin(id, position);
+      if (node) {
+        node.fx = position.x;
+        node.fy = position.y;
+      }
+    } else {
+      this.positions.release(id);
+      if (node) {
+        node.fx = null;
+        node.fy = null;
+      }
+    }
+    this.onPinnedChange();
   }
 
   pause(): void {
