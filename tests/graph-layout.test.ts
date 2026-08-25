@@ -752,13 +752,13 @@ describe("label policy", () => {
     expect(labelZoomStyleForRatio(4)).toEqual({ visible: false, size: 6.5, opacity: 0 });
   });
 
-  it("eases unrelated labels out quickly without snapping", () => {
-    expect(HOVER_TRANSITION_DURATION_MS).toBe(210);
+  it("eases graph emphasis symmetrically without snapping", () => {
+    expect(HOVER_TRANSITION_DURATION_MS).toBe(320);
     expect(hoverTransitionProgress(0)).toBe(0);
-    expect(hoverTransitionProgress(HOVER_TRANSITION_DURATION_MS / 2)).toBe(0.875);
+    expect(hoverTransitionProgress(HOVER_TRANSITION_DURATION_MS / 2)).toBe(0.5);
     expect(hoverTransitionProgress(HOVER_TRANSITION_DURATION_MS)).toBe(1);
-    expect(interpolateHoverValue(1, 0, 0.875)).toBe(0.125);
-    expect(labelOpacityForHover(0.8, 0.125)).toBeCloseTo(0.1);
+    expect(interpolateHoverValue(1, 0, 0.5)).toBe(0.5);
+    expect(labelOpacityForHover(0.8, 0.5)).toBeCloseTo(0.4);
   });
 });
 
