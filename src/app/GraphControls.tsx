@@ -9,6 +9,8 @@ type PopoverName = "filters";
 interface Props {
   manifest: GraphManifest;
   projection: GraphProjection;
+  backTraceActive: boolean;
+  backTraceVisitCount: number;
   selected?: string;
   focus: boolean;
   direction: "in" | "out" | "both";
@@ -18,10 +20,12 @@ interface Props {
   search: string;
   searchResults: GraphNode[];
   onOverview: () => void;
+  onResetBackTrace: () => void;
   onClearFocus: () => void;
   onSearchChange: (value: string) => void;
   onSelect: (id: string) => void;
   onToggleFilter: (key: FilterKey, value: string) => void;
+  onToggleBackTrace: () => void;
   onClearFilters: () => void;
   onToggleReader: () => void;
 }
@@ -74,6 +78,8 @@ function ToggleGroup({
 export function GraphControls({
   manifest,
   projection,
+  backTraceActive,
+  backTraceVisitCount,
   selected,
   focus,
   direction,
@@ -83,10 +89,12 @@ export function GraphControls({
   search,
   searchResults,
   onOverview,
+  onResetBackTrace,
   onClearFocus,
   onSearchChange,
   onSelect,
   onToggleFilter,
+  onToggleBackTrace,
   onClearFilters,
   onToggleReader,
 }: Props) {
@@ -247,6 +255,24 @@ export function GraphControls({
               </span>
               <i aria-hidden="true">↗</i>
             </button>
+            <section aria-label="Back trace" className="back-trace-control">
+              <div>
+                <strong>Back trace</strong>
+                <small>Stain opened nodes during this session</small>
+              </div>
+              <fieldset aria-label="Back trace controls" className="back-trace-actions">
+                <button aria-pressed={backTraceActive} onClick={onToggleBackTrace} type="button">
+                  {backTraceActive ? "Deactivate" : "Activate"}
+                </button>
+                <button
+                  disabled={backTraceVisitCount === 0}
+                  onClick={onResetBackTrace}
+                  type="button"
+                >
+                  Reset
+                </button>
+              </fieldset>
+            </section>
             {search.trim() && (
               <section aria-label="Search results" className="filter-search-results">
                 {searchResults.length > 0 ? (

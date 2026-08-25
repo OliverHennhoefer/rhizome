@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { GraphManifest, GraphNode } from "../shared/contracts";
 import { Graph2D } from "./Graph2D";
 import { createGraph, projectGraph } from "./graph";
@@ -30,9 +30,14 @@ export function App() {
   const [manifest, setManifest] = useState<GraphManifest>();
   const [loadError, setLoadError] = useState<string>();
   const [state, setState] = useState<UrlState>(initialState);
+  const selectedRef = useRef(initialState.note);
   const [readerOpen, setReaderOpen] = useState(Boolean(initialState.note));
   const [overviewRevision, setOverviewRevision] = useState(0);
   const [search, setSearch] = useState("");
+  const [backTraceActive, setBackTraceActive] = useState(false);
+  const [backTraceVisits, setBackTraceVisits] = useState<ReadonlyMap<string, number>>(
+    () => new Map(),
+  );
   const webgl = useMemo(hasWebGl, []);
 
   useEffect(() => {
@@ -49,6 +54,7 @@ export function App() {
           url.focus = false;
           url.direction = "both";
         }
+        selectedRef.current = url.note;
         setReaderOpen(Boolean(url.note));
         setState(url);
         document.title = value.config.site.title;
@@ -95,11 +101,21 @@ export function App() {
   const update = (change: Partial<UrlState>) => setState((current) => ({ ...current, ...change }));
   const select = (note: string) => {
     if (!note) return;
+    const readerChanged = selectedRef.current !== note;
+    selectedRef.current = note;
+    if (backTraceActive && readerChanged) {
+      setBackTraceVisits((current) => {
+        const next = new Map(current);
+        next.set(note, (next.get(note) ?? 0) + 1);
+        return next;
+      });
+    }
     update({ note });
     setSearch("");
     setReaderOpen(true);
   };
   const clearSelection = () => {
+    selectedRef.current = undefined;
     update({ note: undefined, focus: false, direction: "both" });
     setReaderOpen(false);
   };
@@ -174,6 +190,8 @@ export function App() {
             </div>
           ) : (
             <Graph2D
+              backTraceActive={backTraceActive}
+              backTraceVisits={backTraceVisits}
               depth={state.depth}
               direction={state.direction}
               filters={filters}
@@ -184,7 +202,9 @@ export function App() {
               onClearFocus={() => update({ focus: false, direction: "both" })}
               onClearSelection={clearSelection}
               onOverview={showOverview}
+              onResetBackTrace={() => setBackTraceVisits(new Map())}
               onSelect={select}
+              onToggleBackTrace={() => setBackTraceActive((current) => !current)}
               onToggleFilter={toggleFilter}
               onToggleReader={() => state.note && setReaderOpen((current) => !current)}
               overviewRevision={overviewRevision}

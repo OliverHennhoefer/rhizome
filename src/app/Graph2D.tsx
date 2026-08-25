@@ -11,6 +11,8 @@ interface Props {
   graph: RhizomeGraph;
   manifest: GraphManifest;
   projection: GraphProjection;
+  backTraceActive: boolean;
+  backTraceVisits: ReadonlyMap<string, number>;
   selected?: string;
   focus: boolean;
   direction: "in" | "out" | "both";
@@ -24,7 +26,9 @@ interface Props {
   onSelect: (id: string) => void;
   onClearSelection: () => void;
   onOverview: () => void;
+  onResetBackTrace: () => void;
   onClearFocus: () => void;
+  onToggleBackTrace: () => void;
   onToggleFilter: (key: FilterKey, value: string) => void;
   onClearFilters: () => void;
   onSearchChange: (value: string) => void;
@@ -47,6 +51,8 @@ export function Graph2D({
   graph,
   manifest,
   projection,
+  backTraceActive,
+  backTraceVisits,
   selected,
   focus,
   direction,
@@ -60,7 +66,9 @@ export function Graph2D({
   onSelect,
   onClearSelection,
   onOverview,
+  onResetBackTrace,
   onClearFocus,
+  onToggleBackTrace,
   onToggleFilter,
   onClearFilters,
   onSearchChange,
@@ -96,6 +104,7 @@ export function Graph2D({
     if (!viewport) return;
     const resetOverview = appliedOverviewRevision.current !== overviewRevision;
     viewport.sync({
+      backTraceVisits,
       projection,
       selected,
       focus,
@@ -111,6 +120,7 @@ export function Graph2D({
       viewport.resetLayout();
     }
   }, [
+    backTraceVisits,
     compact,
     focus,
     motionEnabled,
@@ -133,6 +143,8 @@ export function Graph2D({
         ref={container}
       />
       <GraphControls
+        backTraceActive={backTraceActive}
+        backTraceVisitCount={backTraceVisits.size}
         depth={depth}
         direction={direction}
         filters={filters}
@@ -141,6 +153,8 @@ export function Graph2D({
         onClearFilters={onClearFilters}
         onClearFocus={onClearFocus}
         onOverview={onOverview}
+        onResetBackTrace={onResetBackTrace}
+        onToggleBackTrace={onToggleBackTrace}
         onToggleFilter={onToggleFilter}
         onToggleReader={onToggleReader}
         projection={projection}

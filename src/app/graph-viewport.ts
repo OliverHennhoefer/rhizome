@@ -31,9 +31,10 @@ import {
   nodeRadius,
   projectionBaseBounds,
 } from "./graph-layout";
-import { blendGraphTone, nodeTone, relationTone } from "./graph-theme";
+import { backTraceNodeTone, blendGraphTone, nodeTone, relationTone } from "./graph-theme";
 
 export interface GraphViewportSnapshot {
+  backTraceVisits: ReadonlyMap<string, number>;
   projection: GraphProjection;
   selected?: string;
   focus: boolean;
@@ -107,6 +108,7 @@ export class GraphViewportSession {
   private selected?: string;
   private searchMatches?: ReadonlySet<string>;
   private selectedNeighbors = new Set<string>();
+  private backTraceVisits: ReadonlyMap<string, number> = new Map();
   private suppressClickUntil = 0;
   private destroyed = false;
 
@@ -123,6 +125,13 @@ export class GraphViewportSession {
         context.beginPath();
         context.arc(data.x, data.y, data.size + 4, 0, Math.PI * 2);
         context.strokeStyle = "#8e8e93";
+        context.lineWidth = 1.5;
+        context.stroke();
+      }
+      if (key && key === this.selected && (this.backTraceVisits.get(key) ?? 0) > 0) {
+        context.beginPath();
+        context.arc(data.x, data.y, data.size + 3, 0, Math.PI * 2);
+        context.strokeStyle = "#f5f5f7";
         context.lineWidth = 1.5;
         context.stroke();
       }
@@ -205,7 +214,9 @@ export class GraphViewportSession {
     const minimumAlpha = this.searchMatches ? 0x22 / 0xff : 0x2e / 0xff;
     const hoverAlpha = interpolateHoverValue(minimumAlpha, 1, hoverRelevance);
     const alpha = searchRelated ? hoverAlpha : minimumAlpha;
-    const color = isSelected ? "#ffffff" : nodeTone();
+    const visits = this.backTraceVisits.get(node) ?? 0;
+    const isStained = visits > 0;
+    const color = isStained ? backTraceNodeTone(visits) : isSelected ? "#ffffff" : nodeTone();
     const size = this.nodeSize(node, data);
     return {
       ...data,
@@ -220,7 +231,7 @@ export class GraphViewportSession {
       zIndex:
         isSelected || isHovered ? 4 : isPinned || isSearchMatch ? 3 : isSelectedNeighbor ? 2 : 1,
       forceLabel: true,
-      highlighted: isPinned || isHovered,
+      highlighted: isPinned || isHovered || (isSelected && isStained),
     };
   }
 
@@ -717,6 +728,7 @@ export class GraphViewportSession {
     const selectionChanged = previous?.selected !== next.selected;
     const focusChanged = previous?.focus !== next.focus;
     const searchChanged = previous?.searchMatches !== next.searchMatches;
+    const backTraceChanged = previous?.backTraceVisits !== next.backTraceVisits;
     const previousEligible = previous
       ? isMotionEligible(previous.projection, previous.compact)
       : undefined;
@@ -728,6 +740,7 @@ export class GraphViewportSession {
 
     this.snapshot = next;
     this.selected = next.selected;
+    this.backTraceVisits = next.backTraceVisits;
     if (selectionChanged) this.cancelStageClick();
     this.searchMatches = next.searchMatches;
     if (next.searchMatches) {
@@ -735,6 +748,11 @@ export class GraphViewportSession {
     } else {
       this.container.removeAttribute("data-search-match-count");
     }
+    this.container.setAttribute("data-back-trace-node-count", String(this.backTraceVisits.size));
+    this.container.setAttribute(
+      "data-back-trace-selected-visits",
+      String(this.selected ? (this.backTraceVisits.get(this.selected) ?? 0) : 0),
+    );
 
     if (projectionChanged) this.replaceDisplayGraph(next.projection);
     else if (selectionChanged) {
@@ -753,7 +771,10 @@ export class GraphViewportSession {
       this.startMotion();
     }
 
-    if (!projectionChanged && (selectionChanged || focusChanged || searchChanged)) {
+    if (
+      !projectionChanged &&
+      (selectionChanged || focusChanged || searchChanged || backTraceChanged)
+    ) {
       this.renderer.refresh();
     }
     if (previous && selectionChanged && next.selected && this.displayGraph.hasNode(next.selected)) {
@@ -800,6 +821,8 @@ export class GraphViewportSession {
     this.container.removeAttribute("data-hovered-node");
     this.container.removeAttribute("data-hovered-neighbor-count");
     this.container.removeAttribute("data-search-match-count");
+    this.container.removeAttribute("data-back-trace-node-count");
+    this.container.removeAttribute("data-back-trace-selected-visits");
     this.container.removeAttribute("data-normalization-bounds");
     this.container.removeAttribute("data-camera-ratio");
     this.container.removeAttribute("data-label-visibility");

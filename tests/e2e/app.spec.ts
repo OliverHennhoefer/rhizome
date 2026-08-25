@@ -101,6 +101,111 @@ test("opens a random visible note from filters", async ({ page }) => {
   await expect(page).toHaveURL(/note=/);
 });
 
+test("records and resets session-only Back trace visits across reader navigation", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "root", "root desktop project only");
+  await page.goto("");
+  const graph = page.getByTestId("graph-2d");
+
+  await page.getByRole("button", { name: "Filters" }).click();
+  let backTrace = page.getByRole("region", { name: "Back trace" });
+  const reset = backTrace.getByRole("button", { name: "Reset" });
+  const activate = backTrace.getByRole("button", { name: "Activate" });
+  await expect(activate).toHaveAttribute("aria-pressed", "false");
+  await expect(reset).toBeDisabled();
+  await expect(graph).toHaveAttribute("data-back-trace-node-count", "0");
+  await activate.click();
+  await expect(backTrace.getByRole("button", { name: "Deactivate" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  await page.getByLabel("Search notes").fill("AdamW");
+  await page
+    .getByRole("region", { name: "Search results" })
+    .getByRole("button", { name: /AdamW/ })
+    .click();
+  await expect(page.getByTestId("reader").getByRole("heading", { name: "AdamW" })).toBeVisible();
+  await expect(graph).toHaveAttribute("data-back-trace-node-count", "1");
+  await expect(graph).toHaveAttribute("data-back-trace-selected-visits", "1");
+
+  await searchNotes(page, "AdamW");
+  await page
+    .getByRole("region", { name: "Search results" })
+    .getByRole("button", { name: /AdamW/ })
+    .click();
+  await expect(graph).toHaveAttribute("data-back-trace-selected-visits", "1");
+
+  const relationships = page.getByTestId("reader").locator(".relationships");
+  const source = relationships
+    .locator(".relationship")
+    .filter({ hasText: "Supported by" })
+    .filter({ hasText: "Decoupled Weight Decay Regularization" });
+  await expect(source).toBeVisible({ timeout: 15_000 });
+  await source.locator(".relationship-main > button").click();
+  await expect(graph).toHaveAttribute("data-back-trace-node-count", "2");
+  await expect(graph).toHaveAttribute("data-back-trace-selected-visits", "1");
+
+  await searchNotes(page, "AdamW");
+  await page
+    .getByRole("region", { name: "Search results" })
+    .getByRole("button", { name: /AdamW/ })
+    .click();
+  await expect(graph).toHaveAttribute("data-back-trace-node-count", "2");
+  await expect(graph).toHaveAttribute("data-back-trace-selected-visits", "2");
+
+  await page.getByRole("button", { name: "Filters" }).click();
+  const filters = page.getByRole("dialog", { name: "Graph filters" });
+  await filters.getByText("Types", { exact: true }).click();
+  await filters.getByLabel("component", { exact: true }).check();
+  await expect(graph).toHaveAttribute("data-back-trace-node-count", "2");
+  await filters.getByLabel("component", { exact: true }).uncheck();
+
+  backTrace = page.getByRole("region", { name: "Back trace" });
+  await backTrace.getByRole("button", { name: "Deactivate" }).click();
+  await expect(backTrace.getByRole("button", { name: "Activate" })).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
+  await page.getByLabel("Search notes").fill("RMS normalization");
+  await page
+    .getByRole("region", { name: "Search results" })
+    .getByRole("button", { name: /RMS normalization/ })
+    .click();
+  await expect(graph).toHaveAttribute("data-back-trace-node-count", "2");
+  await expect(graph).toHaveAttribute("data-back-trace-selected-visits", "0");
+
+  await page.getByRole("button", { name: "Filters" }).click();
+  backTrace = page.getByRole("region", { name: "Back trace" });
+  await backTrace.getByRole("button", { name: "Reset" }).click();
+  await expect(graph).toHaveAttribute("data-back-trace-node-count", "0");
+  await expect(backTrace.getByRole("button", { name: "Reset" })).toBeDisabled();
+  await expect(backTrace.getByRole("button", { name: "Activate" })).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
+
+  await backTrace.getByRole("button", { name: "Activate" }).click();
+  await expect(graph).toHaveAttribute("data-back-trace-selected-visits", "0");
+  await page.getByLabel("Search notes").fill("AdamW");
+  await page
+    .getByRole("region", { name: "Search results" })
+    .getByRole("button", { name: /AdamW/ })
+    .click();
+  await expect(graph).toHaveAttribute("data-back-trace-node-count", "1");
+
+  await page.reload();
+  await expect(graph).toHaveAttribute("data-back-trace-node-count", "0");
+  await page.getByRole("button", { name: "Filters" }).click();
+  backTrace = page.getByRole("region", { name: "Back trace" });
+  await expect(backTrace.getByRole("button", { name: "Activate" })).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
+  await expect(backTrace.getByRole("button", { name: "Reset" })).toBeDisabled();
+});
+
 test("shows every label uniformly, fades them with distance, then hides them", async ({
   page,
 }, testInfo) => {
