@@ -12,6 +12,8 @@ export const LABEL_ZOOM_SETTINGS = {
   hiddenRatio: 3,
 } as const;
 
+export const HOVER_TRANSITION_DURATION_MS = 150;
+
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
 }
@@ -42,12 +44,15 @@ export function labelZoomStyleForRatio(ratio: number): LabelZoomStyle {
   };
 }
 
-export function labelOpacityForHover(
-  node: string,
-  opacity: number,
-  hovered: string | undefined,
-  hoverNeighbors: ReadonlySet<string>,
-): number {
-  if (!hovered || node === hovered || hoverNeighbors.has(node)) return opacity;
-  return 0;
+export function hoverTransitionProgress(elapsed: number): number {
+  const linear = clamp(elapsed / HOVER_TRANSITION_DURATION_MS, 0, 1);
+  return 1 - (1 - linear) ** 3;
+}
+
+export function interpolateHoverValue(from: number, to: number, progress: number): number {
+  return from + (to - from) * clamp(progress, 0, 1);
+}
+
+export function labelOpacityForHover(opacity: number, relevance: number): number {
+  return opacity * clamp(relevance, 0, 1);
 }

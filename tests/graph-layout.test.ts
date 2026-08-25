@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { createGraph, type GraphProjection, type RhizomeGraph } from "../src/app/graph";
-import { labelOpacityForHover, labelZoomStyleForRatio } from "../src/app/graph-labels";
+import {
+  HOVER_TRANSITION_DURATION_MS,
+  hoverTransitionProgress,
+  interpolateHoverValue,
+  labelOpacityForHover,
+  labelZoomStyleForRatio,
+} from "../src/app/graph-labels";
 import {
   buildPhysicalLinks,
   clampPositionToRadius,
@@ -429,13 +435,12 @@ describe("label policy", () => {
     expect(labelZoomStyleForRatio(4)).toEqual({ visible: false, size: 6.5, opacity: 0 });
   });
 
-  it("keeps hovered and connected labels while making unrelated labels transparent", () => {
-    const neighbors = new Set(["neighbor"]);
-
-    expect(labelOpacityForHover("hovered", 0.8, "hovered", neighbors)).toBe(0.8);
-    expect(labelOpacityForHover("neighbor", 0.8, "hovered", neighbors)).toBe(0.8);
-    expect(labelOpacityForHover("unrelated", 0.8, "hovered", neighbors)).toBe(0);
-    expect(labelOpacityForHover("unrelated", 0.8, undefined, neighbors)).toBe(0.8);
+  it("eases unrelated labels out quickly without snapping", () => {
+    expect(hoverTransitionProgress(0)).toBe(0);
+    expect(hoverTransitionProgress(HOVER_TRANSITION_DURATION_MS / 2)).toBe(0.875);
+    expect(hoverTransitionProgress(HOVER_TRANSITION_DURATION_MS)).toBe(1);
+    expect(interpolateHoverValue(1, 0, 0.875)).toBe(0.125);
+    expect(labelOpacityForHover(0.8, 0.125)).toBeCloseTo(0.1);
   });
 });
 
