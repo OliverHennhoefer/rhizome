@@ -741,15 +741,15 @@ describe("motion policy and position state", () => {
 
 describe("label policy", () => {
   it("scales and fades every label uniformly with zoom", () => {
-    expect(labelZoomStyleForRatio(0.5)).toEqual({ visible: true, size: 13, opacity: 1 });
-    expect(labelZoomStyleForRatio(1)).toEqual({ visible: true, size: 12, opacity: 0.953 });
-    expect(labelZoomStyleForRatio(2)).toEqual({ visible: true, size: 8.485, opacity: 0.403 });
+    expect(labelZoomStyleForRatio(0.5)).toEqual({ visible: true, size: 13.5, opacity: 1 });
+    expect(labelZoomStyleForRatio(1)).toEqual({ visible: true, size: 12.5, opacity: 0.953 });
+    expect(labelZoomStyleForRatio(2)).toEqual({ visible: true, size: 8.839, opacity: 0.403 });
   });
 
   it("removes every label at the distant threshold", () => {
     expect(labelZoomStyleForRatio(2.99).visible).toBe(true);
-    expect(labelZoomStyleForRatio(3)).toEqual({ visible: false, size: 6.928, opacity: 0 });
-    expect(labelZoomStyleForRatio(4)).toEqual({ visible: false, size: 6.5, opacity: 0 });
+    expect(labelZoomStyleForRatio(3)).toEqual({ visible: false, size: 7.217, opacity: 0 });
+    expect(labelZoomStyleForRatio(4)).toEqual({ visible: false, size: 7, opacity: 0 });
   });
 
   it("requires closer zoom before revealing labels on smaller screens", () => {

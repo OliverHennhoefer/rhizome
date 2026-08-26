@@ -249,7 +249,7 @@ test("shows every label uniformly, fades them with distance, then hides them", a
   const graph = page.getByTestId("graph-2d");
   await expect(graph).toHaveAttribute("data-label-visibility", "all");
   await expect(graph).toHaveAttribute("data-label-opacity", "0.927");
-  await expect(graph).toHaveAttribute("data-label-size", "11.547");
+  await expect(graph).toHaveAttribute("data-label-size", "12.028");
 
   const bounds = await graph.boundingBox();
   expect(bounds).not.toBeNull();
@@ -269,7 +269,7 @@ test("shows every label uniformly, fades them with distance, then hides them", a
   }
   await expect(graph).toHaveAttribute("data-label-visibility", "all");
   await expect(graph).toHaveAttribute("data-label-opacity", "1.000");
-  await expect(graph).toHaveAttribute("data-label-size", "13.000");
+  await expect(graph).toHaveAttribute("data-label-size", "13.500");
 });
 
 test("clears selection on a stage click while preserving double-click zoom", async ({

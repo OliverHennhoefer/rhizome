@@ -94,7 +94,7 @@
   overflow-wrap: anywhere;
   color: var(--subtle);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .close-reader {
@@ -123,7 +123,7 @@
   border-radius: 8px;
   color: var(--secondary);
   background: var(--surface);
-  font-size: 9px;
+  font-size: 10px;
   cursor: pointer;
 }
 
@@ -154,7 +154,7 @@
 .reader-focus > h3 {
   margin: 0;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 650;
   letter-spacing: 0.13em;
   text-transform: uppercase;
@@ -176,7 +176,7 @@
   border-radius: 9px;
   color: var(--secondary);
   background: var(--surface);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.25;
   text-align: left;
   cursor: pointer;
@@ -195,7 +195,7 @@
 
 .reader-focus-options small {
   color: var(--muted);
-  font-size: 8px;
+  font-size: 9px;
 }
 
 .reader-focus-options button[aria-pressed="true"] small {
@@ -206,7 +206,7 @@
   display: grid;
   gap: 7px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .reader-focus-depth > span {
@@ -238,7 +238,7 @@
   border-radius: 6px;
   color: var(--muted);
   background: var(--surface);
-  font-size: 8px;
+  font-size: 9px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -247,7 +247,7 @@
   padding: 20px 28px 28px;
   overflow-wrap: anywhere;
   color: var(--secondary);
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.68;
 }
 
@@ -357,7 +357,7 @@
 .relationships > h3 {
   margin: 0 0 13px;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 650;
   letter-spacing: 0.13em;
   text-transform: uppercase;
@@ -413,7 +413,7 @@
 
 .relationship-type {
   color: var(--muted);
-  font-size: 9px;
+  font-size: 10px;
 }
 
 .relationship-target strong,
@@ -423,7 +423,7 @@
 
 .relationship-target strong {
   color: var(--secondary);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 560;
   line-height: 1.35;
 }
@@ -431,7 +431,7 @@
 .relationship-target small {
   margin-top: 3px;
   color: var(--subtle);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1.35;
 }
 
@@ -465,7 +465,7 @@
   border-radius: 6px;
   color: var(--muted);
   background: transparent;
-  font-size: 8px;
+  font-size: 9px;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -504,7 +504,7 @@
   margin: 0;
   overflow-wrap: anywhere;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   font-style: normal;
   line-height: 1.5;
 }
@@ -518,7 +518,7 @@
   overflow-wrap: anywhere;
   color: var(--subtle);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 8px;
+  font-size: 9px;
 }
 
 @media (max-width: 760px) {

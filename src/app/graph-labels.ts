@@ -5,9 +5,9 @@ export interface LabelZoomStyle {
 }
 
 export const LABEL_ZOOM_SETTINGS = {
-  baseSize: 12,
-  maximumSize: 13,
-  minimumSize: 6.5,
+  baseSize: 12.5,
+  maximumSize: 13.5,
+  minimumSize: 7,
   fullOpacityRatio: 0.7,
   hiddenRatio: 3,
   fullViewportWidth: 1056,
