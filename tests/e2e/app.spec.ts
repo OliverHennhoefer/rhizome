@@ -764,6 +764,22 @@ test("formats relationships as directional rows with collapsed local source evid
   );
 });
 
+test("combines multiple relationship kinds for the same note into one row", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "root", "root desktop project only");
+  await page.goto("?note=Foundations%2FArithmetic%2FExponentials");
+  const relationships = page.getByTestId("reader").locator(".relationships");
+  await expect(relationships.getByRole("heading", { name: "Relationships" })).toBeVisible({
+    timeout: 15_000,
+  });
+
+  const softmax = relationships.locator(".relationship").filter({ hasText: "Softmax and logits" });
+  await expect(softmax).toHaveCount(1);
+  await expect(softmax.locator(".relationship-type")).toHaveText(["→Links to", "←Depends on"]);
+  await expect(softmax.getByRole("button", { name: "2 sources" })).toBeVisible();
+});
+
 test("closes graph popovers with Escape and restores trigger focus", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "root", "root desktop project only");
   await page.goto("");

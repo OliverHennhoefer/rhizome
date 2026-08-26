@@ -15,11 +15,16 @@ export interface ExternalDisplay {
   url: string;
 }
 
+export interface RelationshipKindView {
+  type: string;
+  direction: RelationshipDirection;
+  label: string;
+}
+
 export interface RelationshipView {
   edgeId: string;
   counterpart: GraphNode;
-  direction: RelationshipDirection;
-  label: string;
+  relations: RelationshipKindView[];
   evidence: EdgeEvidence[];
   external?: ExternalDisplay;
 }
@@ -104,9 +109,14 @@ export function buildRelationshipViews(
     string,
     {
       counterpart: GraphNode;
-      directions: Set<RelationshipDirection>;
+      relations: Map<
+        string,
+        {
+          directions: Set<RelationshipDirection>;
+          edge: GraphEdge;
+        }
+      >;
       edgeIds: string[];
-      edge: GraphEdge;
       evidence: Map<string, EdgeEvidence>;
     }
   >();
@@ -117,27 +127,50 @@ export function buildRelationshipViews(
     const counterpart = nodes.get(counterpartId);
     if (!counterpart) continue;
     const direction = directionFor(edge, details.id);
-    const groupKey = JSON.stringify([counterpartId, edge.type, edge.directed]);
-    const group = grouped.get(groupKey) ?? {
+    const group = grouped.get(counterpartId) ?? {
       counterpart,
-      directions: new Set<RelationshipDirection>(),
-      edgeIds: [],
-      edge,
+      relations: new Map<string, { directions: Set<RelationshipDirection>; edge: GraphEdge }>(),
+      edgeIds: [] as string[],
       evidence: new Map<string, EdgeEvidence>(),
     };
-    group.directions.add(direction);
+    const relationKey = JSON.stringify([edge.type, edge.directed]);
+    const relation = group.relations.get(relationKey) ?? {
+      directions: new Set<RelationshipDirection>(),
+      edge,
+    };
+    relation.directions.add(direction);
+    group.relations.set(relationKey, relation);
     group.edgeIds.push(edgeId);
     for (const item of evidence.values()) group.evidence.set(evidenceKey(item), item);
-    grouped.set(groupKey, group);
+    grouped.set(counterpartId, group);
   }
 
+  const rank: Record<RelationshipDirection, number> = {
+    bidirectional: 0,
+    outgoing: 1,
+    incoming: 2,
+    undirected: 3,
+  };
   const views: RelationshipView[] = [...grouped.values()].map((group) => {
-    const direction = combinedDirection(group.directions);
+    const relations = [...group.relations.values()]
+      .map(({ directions, edge }) => {
+        const direction = combinedDirection(directions);
+        return {
+          type: edge.type,
+          direction,
+          label: relationLabel(edge, direction, manifest),
+        };
+      })
+      .sort(
+        (left, right) =>
+          rank[left.direction] - rank[right.direction] ||
+          left.label.localeCompare(right.label) ||
+          left.type.localeCompare(right.type),
+      );
     return {
       edgeId: group.edgeIds.sort((left, right) => left.localeCompare(right))[0],
       counterpart: group.counterpart,
-      direction,
-      label: relationLabel(group.edge, direction, manifest),
+      relations,
       evidence: [...group.evidence.values()].sort(
         (left, right) =>
           left.source.localeCompare(right.source) ||
@@ -148,17 +181,14 @@ export function buildRelationshipViews(
     };
   });
 
-  const rank: Record<RelationshipDirection, number> = {
-    bidirectional: 0,
-    outgoing: 1,
-    incoming: 2,
-    undirected: 3,
-  };
-  return views.sort(
-    (left, right) =>
-      rank[left.direction] - rank[right.direction] ||
-      left.label.localeCompare(right.label) ||
+  return views.sort((left, right) => {
+    const leftRelation = left.relations[0];
+    const rightRelation = right.relations[0];
+    return (
+      rank[leftRelation.direction] - rank[rightRelation.direction] ||
+      leftRelation.label.localeCompare(rightRelation.label) ||
       left.counterpart.title.localeCompare(right.counterpart.title) ||
-      left.edgeId.localeCompare(right.edgeId),
-  );
+      left.edgeId.localeCompare(right.edgeId)
+    );
+  });
 }

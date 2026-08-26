@@ -140,9 +140,16 @@ function Relationships({
                   onClick={() => onSelect(relationship.counterpart.id)}
                   type="button"
                 >
-                  <span className="relationship-type">
-                    <i aria-hidden="true">{directionGlyph(relationship.direction)}</i>
-                    {relationship.label}
+                  <span className="relationship-types">
+                    {relationship.relations.map((relation) => (
+                      <span
+                        className="relationship-type"
+                        key={`${relation.type}-${relation.direction}`}
+                      >
+                        <i aria-hidden="true">{directionGlyph(relation.direction)}</i>
+                        {relation.label}
+                      </span>
+                    ))}
                   </span>
                   <strong>
                     {relationship.external?.title ??

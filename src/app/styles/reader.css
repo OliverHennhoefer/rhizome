@@ -403,11 +403,18 @@
   color: var(--text);
 }
 
+.relationship-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 12px;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
 .relationship-type {
   display: flex;
   gap: 6px;
   align-items: center;
-  margin-bottom: 5px;
   color: var(--muted);
   font-size: 9px;
 }
