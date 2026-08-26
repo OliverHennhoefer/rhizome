@@ -52,6 +52,17 @@ async function findEmptyGraphPoint(page: Page, graph: Locator): Promise<{ x: num
   throw new Error("Could not find an empty point in the graph viewport.");
 }
 
+async function selectedNodePoint(graph: Locator): Promise<{ x: number; y: number }> {
+  await expect(graph).toHaveAttribute("data-selected-viewport-x", /.+/);
+  await expect(graph).toHaveAttribute("data-selected-viewport-y", /.+/);
+  const bounds = await graph.boundingBox();
+  if (!bounds) throw new Error("Graph viewport is not visible.");
+  return {
+    x: bounds.x + Number(await graph.getAttribute("data-selected-viewport-x")),
+    y: bounds.y + Number(await graph.getAttribute("data-selected-viewport-y")),
+  };
+}
+
 test("selects notes, restores query state, and loads details lazily", async ({ page }) => {
   let detailsRequests = 0;
   page.on("request", (request) => {
@@ -309,8 +320,7 @@ test("keeps graph normalization stable during an extreme node drag", async ({ pa
   const bounds = await graph.boundingBox();
   expect(bounds).not.toBeNull();
   if (!bounds) return;
-  const x = bounds.x + bounds.width / 2;
-  const y = bounds.y + bounds.height / 2;
+  const { x, y } = await selectedNodePoint(graph);
   const normalizationBounds = await graph.getAttribute("data-normalization-bounds");
   expect(normalizationBounds).not.toBeNull();
 
@@ -340,7 +350,8 @@ test("clears hover state when a focused projection removes the hovered node", as
   const bounds = await graph.boundingBox();
   expect(bounds).not.toBeNull();
   if (!bounds) return;
-  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  const selectedPoint = await selectedNodePoint(graph);
+  await page.mouse.move(selectedPoint.x, selectedPoint.y);
   await expect(graph).toHaveAttribute("data-hovered-node", "Language/Subword tokenization");
 
   await page
@@ -403,8 +414,7 @@ test("selection-only navigation does not reheat the settled graph", async ({ pag
   const bounds = await graph.boundingBox();
   expect(bounds).not.toBeNull();
   if (!bounds) return;
-  const x = bounds.x + bounds.width / 2;
-  const y = bounds.y + bounds.height / 2;
+  const { x, y } = await selectedNodePoint(graph);
   await page.mouse.move(x, y);
   await expect(graph).toHaveAttribute(
     "data-hovered-node",
@@ -490,8 +500,7 @@ test("shift-drag pins, overview resets, and normal drag releases a node", async 
   const bounds = await graph.boundingBox();
   expect(bounds).not.toBeNull();
   if (!bounds) return;
-  const x = bounds.x + bounds.width / 2;
-  const y = bounds.y + bounds.height / 2;
+  let { x, y } = await selectedNodePoint(graph);
 
   await page.keyboard.down("Shift");
   await findEmptyGraphPoint(page, graph);
@@ -514,6 +523,7 @@ test("shift-drag pins, overview resets, and normal drag releases a node", async 
     page.getByTestId("reader").getByRole("heading", { name: "Subword tokenization" }),
   ).toBeVisible();
   await page.waitForTimeout(350);
+  ({ x, y } = await selectedNodePoint(graph));
   await findEmptyGraphPoint(page, graph);
   await page.mouse.move(x, y);
   await expect(graph).toHaveAttribute("data-hovered-node", "Language/Subword tokenization");
@@ -535,8 +545,7 @@ test("shift-drag pins, overview resets, and normal drag releases a node", async 
   const resetBounds = await graph.boundingBox();
   expect(resetBounds).not.toBeNull();
   if (!resetBounds) return;
-  const resetX = resetBounds.x + resetBounds.width / 2;
-  const resetY = resetBounds.y + resetBounds.height / 2;
+  const { x: resetX, y: resetY } = await selectedNodePoint(graph);
   await page.keyboard.down("Shift");
   await page.mouse.move(resetX, resetY);
   await expect(graph).toHaveAttribute("data-hovered-node", "Language/Subword tokenization");

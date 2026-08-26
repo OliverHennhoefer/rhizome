@@ -397,7 +397,10 @@ export class GraphViewportSession {
   };
 
   private writeOverviewViewportPosition(): void {
-    const position = this.renderer.framedGraphToViewport({ x: 0.5, y: 0.5 });
+    const position = this.renderer.framedGraphToViewport(
+      { x: 0.5, y: 0.5 },
+      { cameraState: this.renderer.getCamera().getState() },
+    );
     this.container.setAttribute("data-overview-viewport-x", position.x.toFixed(2));
     this.container.setAttribute("data-overview-viewport-y", position.y.toFixed(2));
   }
@@ -408,7 +411,9 @@ export class GraphViewportSession {
       this.container.removeAttribute("data-selected-viewport-y");
       return;
     }
-    const position = this.renderer.graphToViewport(this.positions.getCurrent(this.selected));
+    const position = this.renderer.graphToViewport(this.positions.getCurrent(this.selected), {
+      cameraState: this.renderer.getCamera().getState(),
+    });
     this.container.setAttribute("data-selected-viewport-x", position.x.toFixed(2));
     this.container.setAttribute("data-selected-viewport-y", position.y.toFixed(2));
   }
@@ -907,12 +912,14 @@ export class GraphViewportSession {
       const cameraState = camera.getState();
       const viewportCenter = this.selectionViewportCenter();
       if (!viewportCenter) return;
-      const nodeViewport = this.renderer.graphToViewport(this.positions.getCurrent(id));
+      const nodeViewport = this.renderer.graphToViewport(this.positions.getCurrent(id), {
+        cameraState,
+      });
       if (Math.hypot(nodeViewport.x - viewportCenter.x, nodeViewport.y - viewportCenter.y) <= 1) {
         return;
       }
-      const nodePosition = this.renderer.viewportToFramedGraph(nodeViewport);
-      const centerPosition = this.renderer.viewportToFramedGraph(viewportCenter);
+      const nodePosition = this.renderer.viewportToFramedGraph(nodeViewport, { cameraState });
+      const centerPosition = this.renderer.viewportToFramedGraph(viewportCenter, { cameraState });
       camera.setState({
         x: cameraState.x + nodePosition.x - centerPosition.x,
         y: cameraState.y + nodePosition.y - centerPosition.y,
@@ -959,16 +966,19 @@ export class GraphViewportSession {
       if (this.destroyed || !this.overviewActive || operation !== this.cameraOperation) return;
       const viewportCenter = this.selectionViewportCenter();
       if (!viewportCenter) return;
-      const overviewViewport = this.renderer.framedGraphToViewport({ x: 0.5, y: 0.5 });
+      const camera = this.renderer.getCamera();
+      const cameraState = camera.getState();
+      const overviewViewport = this.renderer.framedGraphToViewport(
+        { x: 0.5, y: 0.5 },
+        { cameraState },
+      );
       if (
         Math.hypot(overviewViewport.x - viewportCenter.x, overviewViewport.y - viewportCenter.y) <=
         1
       ) {
         return;
       }
-      const camera = this.renderer.getCamera();
-      const cameraState = camera.getState();
-      const centerPosition = this.renderer.viewportToFramedGraph(viewportCenter);
+      const centerPosition = this.renderer.viewportToFramedGraph(viewportCenter, { cameraState });
       camera.setState({
         x: cameraState.x + 0.5 - centerPosition.x,
         y: cameraState.y + 0.5 - centerPosition.y,
