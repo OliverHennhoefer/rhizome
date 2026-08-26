@@ -385,6 +385,39 @@ test("omits relation filtering from graph filters", async ({ page }, testInfo) =
   await expect(filters.locator("label").filter({ hasText: "attention(13)" })).toHaveCount(1);
 });
 
+test("keeps the reader note while filters clear an excluded graph selection", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "root", "root desktop project only");
+  await page.goto("?note=Learning%2FAdamW");
+  const graph = page.getByTestId("graph-2d");
+  const reader = page.getByTestId("reader");
+  await expect(reader.getByRole("heading", { name: "AdamW" })).toBeVisible();
+  await expect(graph).toHaveAttribute("data-emphasis-source", "selection");
+
+  const filterButton = page.getByRole("button", { name: "Filters", exact: true });
+  await filterButton.click();
+  const filters = page.getByRole("dialog", { name: "Graph filters" });
+  await filters.getByText("Types", { exact: true }).click();
+  await filters.getByLabel("foundation", { exact: true }).check();
+
+  await expect(reader.getByRole("heading", { name: "AdamW" })).toBeVisible();
+  await expect(page).toHaveURL(/note=Learning%2FAdamW/);
+  await expect(graph).not.toHaveAttribute("data-emphasis-source", /.+/);
+  await expect(graph).not.toHaveAttribute("data-emphasized-node", /.+/);
+  await expect(graph).not.toHaveAttribute("data-selected-viewport-x", /.+/);
+
+  await filters.getByLabel("foundation", { exact: true }).uncheck();
+  await expect(graph).not.toHaveAttribute("data-emphasis-source", /.+/);
+  await expect(reader.getByRole("heading", { name: "AdamW" })).toBeVisible();
+
+  await filterButton.click();
+  const emptyPoint = await findEmptyGraphPoint(page, graph);
+  await page.mouse.click(emptyPoint.x, emptyPoint.y);
+  await expect(reader).toHaveCount(0);
+  await expect(page).not.toHaveURL(/note=/);
+});
+
 test("selection-only navigation does not reheat the settled graph", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "root", "root desktop project only");
   await page.goto("");

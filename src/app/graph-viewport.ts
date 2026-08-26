@@ -525,10 +525,10 @@ export class GraphViewportSession {
 
   private scheduleClearSelection(): void {
     this.cancelStageClick();
-    if (!this.selected) return;
+    if (!this.snapshot?.selected) return;
     this.stageClickTimer = window.setTimeout(() => {
       this.stageClickTimer = undefined;
-      if (this.selected) this.snapshot?.onClearSelection();
+      if (this.snapshot?.selected) this.snapshot.onClearSelection();
     }, this.renderer.getSetting("doubleClickTimeout") + STAGE_CLICK_GRACE_MS);
   }
 
@@ -825,14 +825,11 @@ export class GraphViewportSession {
         if (status === "settled") {
           this.stopAdaptiveMonitor();
           const current = this.snapshot;
+          const selected = this.selected;
           if (this.overviewActive) {
             this.centerOverview();
-          } else if (
-            current?.readerOpen &&
-            current.selected &&
-            this.displayGraph.hasNode(current.selected)
-          ) {
-            this.centerSelection(current.selected);
+          } else if (current?.readerOpen && selected && this.displayGraph.hasNode(selected)) {
+            this.centerSelection(selected);
           }
         }
       },
@@ -1022,7 +1019,8 @@ export class GraphViewportSession {
     const previousEmphasis = this.currentEmphasisState();
     const previousDesktopHoverStrength = this.desktopHoverStrength();
     const projectionChanged = !previous || previous.projection !== next.projection;
-    const selectionChanged = previous?.selected !== next.selected;
+    const readerSelectionChanged = previous?.selected !== next.selected;
+    const previousGraphSelection = this.selected;
     const touchModeChanged = previous?.touchMode !== next.touchMode;
     const focusChanged = previous?.focus !== next.focus;
     const searchChanged = previous?.searchMatches !== next.searchMatches;
@@ -1034,10 +1032,15 @@ export class GraphViewportSession {
       !previous || previous.motionEnabled !== next.motionEnabled || previousPolicy !== nextPolicy;
 
     this.snapshot = next;
-    if (selectionChanged) this.overviewActive = false;
-    this.selected = next.selected;
+    if (readerSelectionChanged) this.overviewActive = false;
+    const candidateSelection = readerSelectionChanged ? next.selected : previousGraphSelection;
+    this.selected =
+      candidateSelection && next.projection.nodes.has(candidateSelection)
+        ? candidateSelection
+        : undefined;
+    const graphSelectionChanged = previousGraphSelection !== this.selected;
     this.backTraceVisits = next.backTraceVisits;
-    if (selectionChanged) this.cancelStageClick();
+    if (readerSelectionChanged) this.cancelStageClick();
     this.searchMatches = next.searchMatches;
     if (next.searchMatches) {
       this.container.setAttribute("data-search-match-count", String(next.searchMatches.size));
@@ -1051,15 +1054,15 @@ export class GraphViewportSession {
     );
 
     if (projectionChanged) this.replaceDisplayGraph(next.projection);
-    else if (selectionChanged) {
+    else if (graphSelectionChanged) {
       this.selectedNeighbors =
-        next.selected && this.displayGraph.hasNode(next.selected)
-          ? neighborsOf(this.displayGraph, next.selected)
+        this.selected && this.displayGraph.hasNode(this.selected)
+          ? neighborsOf(this.displayGraph, this.selected)
           : new Set<string>();
     }
     this.writeEmphasisAttributes();
     this.writeSelectedViewportPosition();
-    if (previous && (projectionChanged || selectionChanged || touchModeChanged)) {
+    if (previous && (projectionChanged || graphSelectionChanged || touchModeChanged)) {
       this.startHoverTransition(
         previousEmphasis,
         this.currentEmphasisState(),
@@ -1079,7 +1082,11 @@ export class GraphViewportSession {
 
     if (
       !projectionChanged &&
-      (selectionChanged || touchModeChanged || focusChanged || searchChanged || backTraceChanged)
+      (graphSelectionChanged ||
+        touchModeChanged ||
+        focusChanged ||
+        searchChanged ||
+        backTraceChanged)
     ) {
       this.renderer.refresh();
     }
@@ -1109,15 +1116,15 @@ export class GraphViewportSession {
       this.centerOverview();
     } else if (
       !this.overviewActive &&
-      next.selected &&
-      this.displayGraph.hasNode(next.selected) &&
-      ((previous && selectionChanged) ||
+      this.selected &&
+      this.displayGraph.hasNode(this.selected) &&
+      ((previous && graphSelectionChanged) ||
         initialCompactSelection ||
         initialDesktopSelection ||
         desktopReaderGeometryChanged ||
         (next.readerCompact && (readerOpened || readerGrew)))
     ) {
-      this.centerSelection(next.selected);
+      this.centerSelection(this.selected);
     }
   }
 
@@ -1151,14 +1158,11 @@ export class GraphViewportSession {
     this.renderer.resize(true).scheduleRender();
     this.applyLabelZoom(this.renderer.getCamera().getState().ratio);
     const snapshot = this.snapshot;
+    const selected = this.selected;
     if (this.overviewActive) {
       this.centerOverview();
-    } else if (
-      snapshot?.readerOpen &&
-      snapshot.selected &&
-      this.displayGraph.hasNode(snapshot.selected)
-    ) {
-      this.centerSelection(snapshot.selected);
+    } else if (snapshot?.readerOpen && selected && this.displayGraph.hasNode(selected)) {
+      this.centerSelection(selected);
     }
   }
 
