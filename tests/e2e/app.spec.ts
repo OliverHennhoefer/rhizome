@@ -786,11 +786,15 @@ test("formats relationships as directional rows with collapsed local source evid
   await expect(source).toContainText("Sources/Decoupled Weight Decay Regularization.md");
   await expect(source.getByText("external", { exact: true })).toHaveCount(0);
   await expect(source.getByRole("link", { name: /new tab/ })).toHaveCount(0);
-  const evidence = source.getByRole("button", { name: "1 source" });
+  await expect(source.locator(".relationship-type")).toHaveText(["→Supported by", "←Linked from"]);
+  const evidence = source.getByRole("button", { name: "2 sources" });
   await expect(evidence).toHaveAttribute("aria-expanded", "false");
   await evidence.click();
   await expect(source.getByText("Property:")).toContainText("supported-by");
   await expect(source.getByText("Learning/AdamW.md:11")).toBeVisible();
+  await expect(
+    source.getByText("Sources/Decoupled Weight Decay Regularization.md:24"),
+  ).toBeVisible();
   await source.locator(".relationship-main > button").click();
   await expect(page).toHaveURL(
     (url) => url.searchParams.get("note") === "Sources/Decoupled Weight Decay Regularization",
