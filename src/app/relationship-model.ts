@@ -80,7 +80,7 @@ function relationshipSummary(
     ({ direction }) => direction === "incoming" || direction === "bidirectional",
   );
   if (!hasOutgoing || !hasIncoming) return undefined;
-  return { type: "interrelated", direction: "bidirectional", label: "Interrelated" };
+  return { type: "interrelated", direction: "bidirectional", label: "Interrelated with" };
 }
 
 function safeDecode(value: string): string {

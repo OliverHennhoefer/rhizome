@@ -293,7 +293,7 @@ describe("relationship view model", () => {
     expect(views[0].summary).toEqual({
       type: "interrelated",
       direction: "bidirectional",
-      label: "Interrelated",
+      label: "Interrelated with",
     });
     expect(views[0].evidence.map((item) => item.edgeId)).toEqual(["a-links-b", "b-depends-a"]);
   });
