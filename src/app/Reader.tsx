@@ -41,6 +41,7 @@ function loadDetails(reference: string): Promise<NodeDetails> {
 }
 
 function directionGlyph(direction: RelationshipDirection): string {
+  if (direction === "bidirectional") return "↔";
   if (direction === "outgoing") return "→";
   if (direction === "incoming") return "←";
   return "—";

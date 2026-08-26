@@ -164,4 +164,64 @@ describe("relationship view model", () => {
       externalDisplay({ ...node, title: "example.com/library/Source%20Note" })?.title,
     ).toBeUndefined();
   });
+
+  it("combines reciprocal links into one row while retaining both sources", () => {
+    const reciprocalManifest: GraphManifest = {
+      ...manifest,
+      nodes: manifest.nodes.slice(0, 2),
+      edges: [
+        {
+          id: "a-to-b",
+          source: "a",
+          target: "b",
+          type: "link",
+          directed: true,
+          occurrences: 1,
+        },
+        {
+          id: "b-to-a",
+          source: "b",
+          target: "a",
+          type: "link",
+          directed: true,
+          occurrences: 1,
+        },
+      ],
+    };
+    const reciprocalDetails: NodeDetails = {
+      schemaVersion: 1,
+      id: "a",
+      outgoing: [
+        {
+          edgeId: "a-to-b",
+          source: "a",
+          target: "b",
+          type: "link",
+          origin: "body",
+          range: { startLine: 4, startColumn: 1, endLine: 4, endColumn: 9 },
+          excerpt: "See [[Beta]].",
+        },
+      ],
+      incoming: [
+        {
+          edgeId: "b-to-a",
+          source: "b",
+          target: "a",
+          type: "link",
+          origin: "body",
+          range: { startLine: 7, startColumn: 1, endLine: 7, endColumn: 10 },
+          excerpt: "See [[Alpha]].",
+        },
+      ],
+    };
+
+    const views = buildRelationshipViews(reciprocalDetails, reciprocalManifest);
+    expect(views).toHaveLength(1);
+    expect(views[0]).toMatchObject({
+      counterpart: { id: "b" },
+      direction: "bidirectional",
+      label: "Linked",
+    });
+    expect(views[0].evidence.map((item) => item.edgeId)).toEqual(["a-to-b", "b-to-a"]);
+  });
 });
