@@ -48,11 +48,13 @@ function Icon({ name }: { name: "overview" | "filter" | "reader" }) {
 function ToggleGroup({
   title,
   values,
+  counts,
   active,
   onToggle,
 }: {
   title: string;
   values: string[];
+  counts: Record<string, string[]>;
   active: Set<string>;
   onToggle: (value: string) => void;
 }) {
@@ -66,8 +68,16 @@ function ToggleGroup({
       <div className="filter-options">
         {values.map((value) => (
           <label key={value}>
-            <input type="checkbox" checked={active.has(value)} onChange={() => onToggle(value)} />
-            <span>{value}</span>
+            <input
+              aria-label={value}
+              type="checkbox"
+              checked={active.has(value)}
+              onChange={() => onToggle(value)}
+            />
+            <span>
+              {value}
+              <small className="filter-option-count">({counts[value]?.length ?? 0})</small>
+            </span>
           </label>
         ))}
       </div>
@@ -296,12 +306,14 @@ export function GraphControls({
             )}
             <ToggleGroup
               active={filters.types}
+              counts={manifest.facets.types}
               onToggle={(value) => onToggleFilter("types", value)}
               title="Types"
               values={Object.keys(manifest.facets.types).sort()}
             />
             <ToggleGroup
               active={filters.tags}
+              counts={manifest.facets.tags}
               onToggle={(value) => onToggleFilter("tags", value)}
               title="Tags"
               values={Object.keys(manifest.facets.tags).sort()}

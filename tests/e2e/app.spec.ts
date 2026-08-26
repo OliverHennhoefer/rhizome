@@ -368,6 +368,10 @@ test("omits relation filtering from graph filters", async ({ page }, testInfo) =
   await expect(filters.getByText("Types", { exact: true })).toBeVisible();
   await expect(filters.getByText("Tags", { exact: true })).toBeVisible();
   await expect(filters.getByText("Relations", { exact: true })).toHaveCount(0);
+  await filters.getByText("Types", { exact: true }).click();
+  await expect(filters.locator("label").filter({ hasText: "component(12)" })).toHaveCount(1);
+  await filters.getByText("Tags", { exact: true }).click();
+  await expect(filters.locator("label").filter({ hasText: "attention(13)" })).toHaveCount(1);
 });
 
 test("selection-only navigation does not reheat the settled graph", async ({ page }, testInfo) => {

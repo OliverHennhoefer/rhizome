@@ -505,6 +505,25 @@ body.is-resizing-reader .stage::before {
   color: var(--text);
 }
 
+.filter-options label > span {
+  display: flex;
+  flex: 1;
+  gap: 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.filter-option-count {
+  color: var(--subtle);
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.filter-options label:hover .filter-option-count {
+  color: var(--muted);
+}
+
 .filter-options input {
   accent-color: var(--text);
 }
