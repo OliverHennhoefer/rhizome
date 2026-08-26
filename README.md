@@ -60,9 +60,14 @@ supported-by:
 relations:
   depends-on:
     label: Depends on
+    inverseLabel: Dependency of
     directed: true
     color: "#d97757"
 ```
+
+Directed relations can use `inverseLabel` to describe the relationship from the target note's
+perspective. The reader therefore shows `Depends on` in one direction and `Dependency of` in the
+other without requiring directional arrows.
 
 Missing links remain visible. Ambiguous links and case-colliding paths fail the build rather than
 silently connecting the wrong knowledge. Configuration is validated against

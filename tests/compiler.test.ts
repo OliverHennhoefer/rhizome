@@ -13,7 +13,7 @@ async function fixture(files: Record<string, string>): Promise<string> {
   await mkdir(path.join(root, "content"), { recursive: true });
   await writeFile(
     path.join(root, "rhizome.config.yaml"),
-    `site:\n  title: Test\ncontent:\n  root: content\n  exclude: []\nrelations:\n  depends-on:\n    label: Depends on\n    directed: true\n    color: "#d97757"\n  related-to:\n    label: Related to\n    directed: false\n    color: "#4f8fba"\n`,
+    `site:\n  title: Test\ncontent:\n  root: content\n  exclude: []\nrelations:\n  depends-on:\n    label: Depends on\n    inverseLabel: Dependency of\n    directed: true\n    color: "#d97757"\n  related-to:\n    label: Related to\n    directed: false\n    color: "#4f8fba"\n`,
   );
   await writeFile(
     path.join(root, "rhizome.schema.json"),
@@ -53,6 +53,7 @@ describe("vault compiler", () => {
     const result = await new VaultCompiler({ projectRoot: root }).clean();
     const manifest = manifestFrom(result.assets);
     expect(manifest.schemaVersion).toBe(2);
+    expect(manifest.config.relations["depends-on"].inverseLabel).toBe("Dependency of");
     expect(manifest.nodes.map((node) => node.id)).toEqual(["Alpha", "folder/Beta"]);
     expect(manifest.nodes.every((node) => !("z" in node))).toBe(true);
     expect(manifest.edges.map((edge) => edge.type).sort()).toEqual(["depends-on", "link"]);

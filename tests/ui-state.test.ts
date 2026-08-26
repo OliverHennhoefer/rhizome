@@ -15,8 +15,18 @@ const manifest: GraphManifest = {
   config: {
     site: { title: "Rhizome" },
     relations: {
-      "depends-on": { label: "Depends on", directed: true, color: "#fff" },
-      "supported-by": { label: "Supported by", directed: true, color: "#aaa" },
+      "depends-on": {
+        label: "Depends on",
+        inverseLabel: "Dependency of",
+        directed: true,
+        color: "#fff",
+      },
+      "supported-by": {
+        label: "Supported by",
+        inverseLabel: "Supports",
+        directed: true,
+        color: "#aaa",
+      },
     },
   },
   nodes: [
@@ -278,8 +288,68 @@ describe("relationship view model", () => {
     expect(views[0].counterpart.id).toBe("b");
     expect(views[0].relations).toEqual([
       { type: "link", direction: "outgoing", label: "Links to" },
-      { type: "depends-on", direction: "incoming", label: "Depends on" },
+      { type: "depends-on", direction: "incoming", label: "Dependency of" },
     ]);
+    expect(views[0].summary).toEqual({
+      type: "interrelated",
+      direction: "bidirectional",
+      label: "Interrelated",
+    });
     expect(views[0].evidence.map((item) => item.edgeId)).toEqual(["a-links-b", "b-depends-a"]);
+  });
+
+  it("keeps different same-direction relationship labels separate", () => {
+    const sameDirectionManifest: GraphManifest = {
+      ...manifest,
+      nodes: manifest.nodes.slice(0, 2),
+      edges: [
+        {
+          id: "a-links-b",
+          source: "a",
+          target: "b",
+          type: "link",
+          directed: true,
+          occurrences: 1,
+        },
+        {
+          id: "a-depends-b",
+          source: "a",
+          target: "b",
+          type: "depends-on",
+          directed: true,
+          occurrences: 1,
+        },
+      ],
+    };
+    const sameDirectionDetails: NodeDetails = {
+      schemaVersion: 1,
+      id: "a",
+      incoming: [],
+      outgoing: [
+        {
+          edgeId: "a-links-b",
+          source: "a",
+          target: "b",
+          type: "link",
+          origin: "body",
+          range: { startLine: 4, startColumn: 1, endLine: 4, endColumn: 9 },
+          excerpt: "See [[Beta]].",
+        },
+        {
+          edgeId: "a-depends-b",
+          source: "a",
+          target: "b",
+          type: "depends-on",
+          origin: "frontmatter",
+          range: { startLine: 3, startColumn: 1, endLine: 3, endColumn: 9 },
+          excerpt: 'depends-on: "[[Beta]]"',
+        },
+      ],
+    };
+
+    const views = buildRelationshipViews(sameDirectionDetails, sameDirectionManifest);
+    expect(views).toHaveLength(1);
+    expect(views[0].summary).toBeUndefined();
+    expect(views[0].relations.map(({ label }) => label)).toEqual(["Depends on", "Links to"]);
   });
 });

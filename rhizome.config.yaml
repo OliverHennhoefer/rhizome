@@ -10,9 +10,11 @@ content:
 relations:
   depends-on:
     label: Depends on
+    inverseLabel: Dependency of
     directed: true
     color: "#d97757"
   supported-by:
     label: Supported by
+    inverseLabel: Supports
     directed: true
     color: "#4f8fba"

@@ -29,6 +29,7 @@
         "required": ["label", "directed", "color"],
         "properties": {
           "label": { "type": "string", "minLength": 1 },
+          "inverseLabel": { "type": "string", "minLength": 1 },
           "directed": { "type": "boolean" },
           "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" }
         }

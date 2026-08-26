@@ -10,6 +10,7 @@ export interface BuildDiagnostic {
 
 export interface RelationDefinition {
   label: string;
+  inverseLabel?: string;
   directed: boolean;
   color: string;
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { EdgeEvidence, GraphManifest, NodeDetails } from "../shared/contracts";
-import { buildRelationshipViews, type RelationshipDirection } from "./relationship-model";
+import { buildRelationshipViews } from "./relationship-model";
 
 interface Props {
   manifest: GraphManifest;
@@ -38,13 +38,6 @@ function loadDetails(reference: string): Promise<NodeDetails> {
     });
   detailsCache.set(reference, request);
   return request;
-}
-
-function directionGlyph(direction: RelationshipDirection): string {
-  if (direction === "bidirectional") return "↔";
-  if (direction === "outgoing") return "→";
-  if (direction === "incoming") return "←";
-  return "—";
 }
 
 function evidenceLocation(item: EdgeEvidence, manifest: GraphManifest): string {
@@ -132,6 +125,9 @@ function Relationships({
         {relationships.map((relationship) => {
           const isExpanded = expanded.has(relationship.edgeId);
           const evidenceId = `evidence-${relationship.edgeId}`;
+          const displayedRelations = relationship.summary
+            ? [relationship.summary]
+            : relationship.relations;
           return (
             <article className="relationship" key={relationship.edgeId}>
               <div className="relationship-main">
@@ -141,12 +137,11 @@ function Relationships({
                   type="button"
                 >
                   <span className="relationship-types">
-                    {relationship.relations.map((relation) => (
+                    {displayedRelations.map((relation) => (
                       <span
                         className="relationship-type"
                         key={`${relation.type}-${relation.direction}`}
                       >
-                        <i aria-hidden="true">{directionGlyph(relation.direction)}</i>
                         {relation.label}
                       </span>
                     ))}

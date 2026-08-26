@@ -175,8 +175,8 @@ test("records and resets the session-only reading path across reader navigation"
   const relationships = page.getByTestId("reader").locator(".relationships");
   const source = relationships
     .locator(".relationship")
-    .filter({ hasText: "Supported by" })
     .filter({ hasText: "Decoupled Weight Decay Regularization" });
+  await expect(source.locator(".relationship-type")).toHaveText("Interrelated");
   await expect(source).toBeVisible({ timeout: 15_000 });
   await source.locator(".relationship-main > button").click();
   await expect(graph).toHaveAttribute("data-back-trace-node-count", "2");
@@ -768,7 +768,7 @@ test("hides, restores, and resizes the reader independently from selection", asy
   await expectSelectedAtVisibleCenter(420);
 });
 
-test("formats relationships as directional rows with collapsed local source evidence", async ({
+test("formats relationships with perspective-aware labels and collapsed local evidence", async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "root", "root desktop project only");
@@ -780,13 +780,12 @@ test("formats relationships as directional rows with collapsed local source evid
 
   const source = relationships
     .locator(".relationship")
-    .filter({ hasText: "Supported by" })
     .filter({ hasText: "Decoupled Weight Decay Regularization" });
-  await expect(source).toContainText("Supported by");
+  await expect(source).toContainText("Interrelated");
   await expect(source).toContainText("Sources/Decoupled Weight Decay Regularization.md");
   await expect(source.getByText("external", { exact: true })).toHaveCount(0);
   await expect(source.getByRole("link", { name: /new tab/ })).toHaveCount(0);
-  await expect(source.locator(".relationship-type")).toHaveText(["→Supported by", "←Linked from"]);
+  await expect(source.locator(".relationship-type")).toHaveText("Interrelated");
   const evidence = source.getByRole("button", { name: "2 sources" });
   await expect(evidence).toHaveAttribute("aria-expanded", "false");
   await evidence.click();
@@ -801,6 +800,22 @@ test("formats relationships as directional rows with collapsed local source evid
   );
 });
 
+test("uses natural labels for outgoing and incoming relationships", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "root", "root desktop project only");
+  await page.goto("?note=Learning%2FOptimizers");
+  const relationships = page.getByTestId("reader").locator(".relationships");
+  await expect(relationships.getByRole("heading", { name: "Relationships" })).toBeVisible({
+    timeout: 15_000,
+  });
+
+  const dependency = relationships.locator(".relationship").filter({ hasText: "Gradient descent" });
+  await expect(dependency.locator(".relationship-type")).toHaveText("Depends on");
+  const dependent = relationships.locator(".relationship").filter({ hasText: "AdamW" });
+  await expect(dependent.locator(".relationship-type")).toHaveText("Dependency of");
+  const link = relationships.locator(".relationship").filter({ hasText: "Inference" });
+  await expect(link.locator(".relationship-type")).toHaveText("Links to");
+});
+
 test("combines multiple relationship kinds for the same note into one row", async ({
   page,
 }, testInfo) => {
@@ -813,7 +828,7 @@ test("combines multiple relationship kinds for the same note into one row", asyn
 
   const softmax = relationships.locator(".relationship").filter({ hasText: "Softmax and logits" });
   await expect(softmax).toHaveCount(1);
-  await expect(softmax.locator(".relationship-type")).toHaveText(["→Links to", "←Depends on"]);
+  await expect(softmax.locator(".relationship-type")).toHaveText("Interrelated");
   await expect(softmax.getByRole("button", { name: "2 sources" })).toBeVisible();
 });
 

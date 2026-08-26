@@ -46,16 +46,21 @@ export async function loadConfig(projectRoot: string, configPath: string): Promi
   const relations: RhizomeConfig["relations"] = {};
   for (const [key, value] of Object.entries(input.relations)) {
     assertRecord(value, `relations.${key}`);
+    const inverseLabel = value.inverseLabel;
     if (
       typeof value.label !== "string" ||
+      (inverseLabel !== undefined && (typeof inverseLabel !== "string" || !inverseLabel.trim())) ||
       typeof value.directed !== "boolean" ||
       typeof value.color !== "string" ||
       !HEX_COLOR.test(value.color)
     ) {
-      throw new Error(`relations.${key} requires label, directed, and a six-digit hex color`);
+      throw new Error(
+        `relations.${key} requires label, directed, and a six-digit hex color; inverseLabel must be non-empty when provided`,
+      );
     }
     relations[key] = {
       label: value.label,
+      ...(typeof inverseLabel === "string" ? { inverseLabel } : {}),
       directed: value.directed,
       color: value.color,
     };

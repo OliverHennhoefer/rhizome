@@ -4,7 +4,10 @@ import type { BuildDiagnostic, SourceRange } from "../shared/contracts.ts";
 export interface RhizomeConfig {
   site: { title: string };
   content: { root: string; exclude: string[] };
-  relations: Record<string, { label: string; directed: boolean; color: string }>;
+  relations: Record<
+    string,
+    { label: string; inverseLabel?: string; directed: boolean; color: string }
+  >;
 }
 
 export interface RawOccurrence {

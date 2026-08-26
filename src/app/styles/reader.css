@@ -412,17 +412,8 @@
 }
 
 .relationship-type {
-  display: flex;
-  gap: 6px;
-  align-items: center;
   color: var(--muted);
   font-size: 9px;
-}
-
-.relationship-type i {
-  width: 12px;
-  color: var(--secondary);
-  font-style: normal;
 }
 
 .relationship-target strong,

@@ -25,6 +25,7 @@ export interface RelationshipView {
   edgeId: string;
   counterpart: GraphNode;
   relations: RelationshipKindView[];
+  summary?: RelationshipKindView;
   evidence: EdgeEvidence[];
   external?: ExternalDisplay;
 }
@@ -56,7 +57,9 @@ function relationLabel(
     if (direction === "incoming") return "Linked from";
     return "Linked";
   }
-  return manifest.config.relations[edge.type]?.label ?? edge.type;
+  const definition = manifest.config.relations[edge.type];
+  if (direction === "incoming" && definition?.inverseLabel) return definition.inverseLabel;
+  return definition?.label ?? edge.type;
 }
 
 function combinedDirection(directions: ReadonlySet<RelationshipDirection>): RelationshipDirection {
@@ -64,6 +67,20 @@ function combinedDirection(directions: ReadonlySet<RelationshipDirection>): Rela
   if (directions.has("incoming") && directions.has("outgoing")) return "bidirectional";
   if (directions.has("outgoing")) return "outgoing";
   return "incoming";
+}
+
+function relationshipSummary(
+  relations: readonly RelationshipKindView[],
+): RelationshipKindView | undefined {
+  if (relations.length < 2) return undefined;
+  const hasOutgoing = relations.some(
+    ({ direction }) => direction === "outgoing" || direction === "bidirectional",
+  );
+  const hasIncoming = relations.some(
+    ({ direction }) => direction === "incoming" || direction === "bidirectional",
+  );
+  if (!hasOutgoing || !hasIncoming) return undefined;
+  return { type: "interrelated", direction: "bidirectional", label: "Interrelated" };
 }
 
 function safeDecode(value: string): string {
@@ -167,10 +184,12 @@ export function buildRelationshipViews(
           left.label.localeCompare(right.label) ||
           left.type.localeCompare(right.type),
       );
+    const summary = relationshipSummary(relations);
     return {
       edgeId: group.edgeIds.sort((left, right) => left.localeCompare(right))[0],
       counterpart: group.counterpart,
       relations,
+      ...(summary ? { summary } : {}),
       evidence: [...group.evidence.values()].sort(
         (left, right) =>
           left.source.localeCompare(right.source) ||
