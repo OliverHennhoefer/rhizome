@@ -753,7 +753,7 @@ describe("label policy", () => {
   });
 
   it("eases graph emphasis symmetrically without snapping", () => {
-    expect(HOVER_TRANSITION_DURATION_MS).toBe(320);
+    expect(HOVER_TRANSITION_DURATION_MS).toBe(450);
     expect(hoverTransitionProgress(0)).toBe(0);
     expect(hoverTransitionProgress(HOVER_TRANSITION_DURATION_MS / 2)).toBe(0.5);
     expect(hoverTransitionProgress(HOVER_TRANSITION_DURATION_MS)).toBe(1);

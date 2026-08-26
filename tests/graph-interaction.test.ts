@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   ADAPTIVE_MOTION_SETTINGS,
+  DEFAULT_EDGE_TONE,
+  DESKTOP_HOVER_UNRELATED_NODE_OPACITY,
   DESKTOP_UNRELATED_NODE_OPACITY,
   dragThreshold,
   effectiveGraphEmphasis,
@@ -29,6 +31,9 @@ describe("touch graph interaction policy", () => {
   it("moderately fades unrelated nodes for touch and desktop interactions", () => {
     expect(unrelatedNodeOpacity(false, true)).toBe(TOUCH_UNRELATED_NODE_OPACITY);
     expect(unrelatedNodeOpacity(false, false)).toBe(DESKTOP_UNRELATED_NODE_OPACITY);
+    expect(unrelatedNodeOpacity(false, false, 1)).toBe(DESKTOP_HOVER_UNRELATED_NODE_OPACITY);
+    expect(DESKTOP_HOVER_UNRELATED_NODE_OPACITY).toBe(DEFAULT_EDGE_TONE);
+    expect(unrelatedNodeOpacity(false, false, 0.5)).toBeCloseTo(0.43);
     expect(unrelatedNodeOpacity(true, true)).toBeCloseTo(0x22 / 0xff);
   });
 
@@ -38,24 +43,14 @@ describe("touch graph interaction policy", () => {
     expect(effectiveLabelRelevance(0, true, true)).toBe(0);
   });
 
-  it("targets the uncovered mobile graph while preserving the desktop center", () => {
+  it("targets the uncovered compact graph independent of input mode", () => {
     expect(
       selectionViewportPoint({
         width: 390,
         height: 844,
-        touchMode: false,
         readerOpen: true,
         readerCompact: true,
-        mobileReaderHeight: 65,
-      }),
-    ).toEqual({ x: 195, y: 422 });
-    expect(
-      selectionViewportPoint({
-        width: 390,
-        height: 844,
-        touchMode: true,
-        readerOpen: true,
-        readerCompact: true,
+        desktopReaderWidth: 420,
         mobileReaderHeight: 65,
       }),
     ).toEqual({ x: 195, y: 147.7 });
@@ -63,12 +58,55 @@ describe("touch graph interaction policy", () => {
       selectionViewportPoint({
         width: 390,
         height: 844,
-        touchMode: true,
         readerOpen: true,
         readerCompact: true,
+        desktopReaderWidth: 420,
+        mobileReaderHeight: 65,
+      }),
+    ).toEqual({ x: 195, y: 147.7 });
+    expect(
+      selectionViewportPoint({
+        width: 390,
+        height: 844,
+        readerOpen: true,
+        readerCompact: true,
+        desktopReaderWidth: 420,
         mobileReaderHeight: 92,
       }),
     ).toBeUndefined();
+  });
+
+  it("centers selections in the desktop area not covered by the reader", () => {
+    expect(
+      selectionViewportPoint({
+        width: 1440,
+        height: 900,
+        readerOpen: true,
+        readerCompact: false,
+        desktopReaderWidth: 420,
+        mobileReaderHeight: 65,
+      }),
+    ).toEqual({ x: 510, y: 450 });
+    expect(
+      selectionViewportPoint({
+        width: 1440,
+        height: 900,
+        readerOpen: true,
+        readerCompact: false,
+        desktopReaderWidth: 500,
+        mobileReaderHeight: 65,
+      }),
+    ).toEqual({ x: 470, y: 450 });
+    expect(
+      selectionViewportPoint({
+        width: 1440,
+        height: 900,
+        readerOpen: false,
+        readerCompact: false,
+        desktopReaderWidth: 500,
+        mobileReaderHeight: 65,
+      }),
+    ).toEqual({ x: 720, y: 450 });
   });
 });
 

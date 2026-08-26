@@ -624,6 +624,12 @@ test("toggles directional focus and returns to a fitted overview", async ({ page
   await expect(graph).toHaveAttribute("data-layout-status", "running");
   await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
   await expect(page.getByTestId("reader")).toBeVisible();
+  await expect
+    .poll(async () => Math.abs(Number(await graph.getAttribute("data-overview-viewport-x")) - 510))
+    .toBeLessThan(2);
+  await expect
+    .poll(async () => Math.abs(Number(await graph.getAttribute("data-overview-viewport-y")) - 450))
+    .toBeLessThan(2);
 });
 
 test("hides, restores, and resizes the reader independently from selection", async ({
@@ -642,6 +648,16 @@ test("hides, restores, and resizes the reader independently from selection", asy
   const cameraRatio = await graph.getAttribute("data-camera-ratio");
   const graphBounds = await graph.boundingBox();
   expect(graphBounds).not.toBeNull();
+  const expectSelectedAtVisibleCenter = async (readerPixels: number) => {
+    if (!graphBounds) return;
+    const expectedX = (graphBounds.width - readerPixels) / 2;
+    await expect
+      .poll(async () =>
+        Math.abs(Number(await graph.getAttribute("data-selected-viewport-x")) - expectedX),
+      )
+      .toBeLessThan(2);
+  };
+  await expectSelectedAtVisibleCenter(420);
   await expect
     .poll(async () => {
       const [controlBounds, readerBounds] = await Promise.all([
@@ -666,6 +682,7 @@ test("hides, restores, and resizes the reader independently from selection", asy
   await page.mouse.move(startX - 80, handle.y + 80, { steps: 5 });
   await page.mouse.up();
   await expect(separator).toHaveAttribute("aria-valuenow", "500");
+  await expectSelectedAtVisibleCenter(500);
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem("rhizome:reader-width")))
     .toBe("500");
@@ -687,18 +704,22 @@ test("hides, restores, and resizes the reader independently from selection", asy
   await separator.focus();
   await page.keyboard.press("Home");
   await expect(separator).toHaveAttribute("aria-valuenow", "320");
+  await expectSelectedAtVisibleCenter(320);
   await separator.dblclick();
   await expect(separator).toHaveAttribute("aria-valuenow", "420");
+  await expectSelectedAtVisibleCenter(420);
 
   await page.getByRole("button", { name: "Close reader" }).click();
   await expect(reader).toHaveCount(0);
   await expect(page).toHaveURL(/note=Learning%2FAdamW/);
   await expect(page.getByRole("button", { name: "Show reader" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Show reader" })).toBeFocused();
+  await expectSelectedAtVisibleCenter(0);
   expect(await graph.boundingBox()).toEqual(graphBounds);
   await page.getByRole("button", { name: "Show reader" }).click();
   await expect(page.getByTestId("reader")).toBeVisible();
   await expect(separator).toHaveAttribute("aria-valuenow", "420");
+  await expectSelectedAtVisibleCenter(420);
 });
 
 test("formats relationships as directional rows with collapsed local source evidence", async ({
@@ -808,6 +829,19 @@ test("mobile retains search and reader navigation", async ({ page }, testInfo) =
   await page.mouse.move(handle.x + handle.width / 2, handle.y + 230, { steps: 5 });
   await page.mouse.up();
   await expect(separator).toHaveAttribute("aria-valuenow", "65");
+
+  const graph = page.getByTestId("graph-2d");
+  await page.getByRole("button", { name: "Overview" }).click();
+  await expect(graph).toHaveAttribute("data-camera-ratio", "1.0800", { timeout: 2_000 });
+  await expect(graph).toHaveAttribute("data-layout-status", "settled", { timeout: 30_000 });
+  await expect
+    .poll(async () => Math.abs(Number(await graph.getAttribute("data-overview-viewport-x")) - 195))
+    .toBeLessThan(2);
+  await expect
+    .poll(async () =>
+      Math.abs(Number(await graph.getAttribute("data-overview-viewport-y")) - 147.7),
+    )
+    .toBeLessThan(2);
 });
 
 test("mobile touch opens, emphasizes, drags, and pins nodes", async ({ page }, testInfo) => {

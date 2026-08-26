@@ -14,6 +14,8 @@ export const ADAPTIVE_MOTION_SETTINGS = {
 
 export const TOUCH_UNRELATED_NODE_OPACITY = 0.62;
 export const DESKTOP_UNRELATED_NODE_OPACITY = 0.62;
+export const DEFAULT_EDGE_TONE = 0.24;
+export const DESKTOP_HOVER_UNRELATED_NODE_OPACITY = DEFAULT_EDGE_TONE;
 
 export interface GraphEmphasisState {
   root?: string;
@@ -23,9 +25,9 @@ export interface GraphEmphasisState {
 export interface SelectionViewportOptions {
   width: number;
   height: number;
-  touchMode: boolean;
   readerOpen: boolean;
   readerCompact: boolean;
+  desktopReaderWidth: number;
   mobileReaderHeight: number;
 }
 
@@ -33,9 +35,18 @@ export function dragThreshold(touch: boolean): number {
   return touch ? POINTER_DRAG_THRESHOLDS.touch : POINTER_DRAG_THRESHOLDS.mouse;
 }
 
-export function unrelatedNodeOpacity(searchActive: boolean, touchSelectionActive: boolean): number {
+export function unrelatedNodeOpacity(
+  searchActive: boolean,
+  touchSelectionActive: boolean,
+  desktopHoverStrength = 0,
+): number {
   if (searchActive) return 0x22 / 0xff;
-  return touchSelectionActive ? TOUCH_UNRELATED_NODE_OPACITY : DESKTOP_UNRELATED_NODE_OPACITY;
+  if (touchSelectionActive) return TOUCH_UNRELATED_NODE_OPACITY;
+  const hoverStrength = Math.max(0, Math.min(1, desktopHoverStrength));
+  return (
+    DESKTOP_UNRELATED_NODE_OPACITY +
+    (DESKTOP_HOVER_UNRELATED_NODE_OPACITY - DESKTOP_UNRELATED_NODE_OPACITY) * hoverStrength
+  );
 }
 
 export function effectiveLabelRelevance(
@@ -66,9 +77,13 @@ export function sameGraphEmphasis(left: GraphEmphasisState, right: GraphEmphasis
 export function selectionViewportPoint(
   options: SelectionViewportOptions,
 ): { x: number; y: number } | undefined {
-  const { width, height, touchMode, readerOpen, readerCompact, mobileReaderHeight } = options;
-  if (!touchMode || !readerOpen || !readerCompact) {
-    return { x: width / 2, y: height / 2 };
+  const { width, height, readerOpen, readerCompact, desktopReaderWidth, mobileReaderHeight } =
+    options;
+  if (!readerOpen) return { x: width / 2, y: height / 2 };
+  if (!readerCompact) {
+    const visibleWidth = width - Math.max(0, desktopReaderWidth);
+    if (visibleWidth < 120) return undefined;
+    return { x: visibleWidth / 2, y: height / 2 };
   }
   const visibleHeight = height * (1 - mobileReaderHeight / 100);
   if (visibleHeight < 120) return undefined;

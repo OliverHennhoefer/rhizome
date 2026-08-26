@@ -19,6 +19,7 @@ interface Props {
   depth: number;
   filters: Record<FilterKey, Set<string>>;
   readerOpen: boolean;
+  desktopReaderWidth: number;
   mobileReaderHeight: number;
   touchMode: boolean;
   search: string;
@@ -67,6 +68,7 @@ export const Graph2D = forwardRef<Graph2DHandle, Props>(function Graph2D(
     depth,
     filters,
     readerOpen,
+    desktopReaderWidth,
     mobileReaderHeight,
     touchMode,
     search,
@@ -138,6 +140,7 @@ export const Graph2D = forwardRef<Graph2DHandle, Props>(function Graph2D(
       touchMode,
       readerOpen,
       readerCompact,
+      desktopReaderWidth,
       mobileReaderHeight,
       reducedMotion,
       searchMatches,
@@ -151,6 +154,7 @@ export const Graph2D = forwardRef<Graph2DHandle, Props>(function Graph2D(
   }, [
     backTraceVisits,
     compact,
+    desktopReaderWidth,
     focus,
     mobileReaderHeight,
     motionEnabled,

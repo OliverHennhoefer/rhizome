@@ -227,6 +227,7 @@ export function App() {
               focus={state.focus}
               graph={graph}
               manifest={manifest}
+              desktopReaderWidth={readerWidth}
               mobileReaderHeight={mobileReaderHeight}
               onClearFilters={clearFilters}
               onClearFocus={() => update({ focus: false, direction: "both" })}

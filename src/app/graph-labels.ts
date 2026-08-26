@@ -12,7 +12,7 @@ export const LABEL_ZOOM_SETTINGS = {
   hiddenRatio: 3,
 } as const;
 
-export const HOVER_TRANSITION_DURATION_MS = 320;
+export const HOVER_TRANSITION_DURATION_MS = 450;
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
