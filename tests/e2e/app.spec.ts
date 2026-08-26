@@ -125,7 +125,7 @@ test("opens a random visible note from filters", async ({ page }) => {
   await expect(page).toHaveURL(/note=/);
 });
 
-test("records and resets session-only Back trace visits across reader navigation", async ({
+test("records and resets the session-only reading path across reader navigation", async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "root", "root desktop project only");
@@ -133,7 +133,7 @@ test("records and resets session-only Back trace visits across reader navigation
   const graph = page.getByTestId("graph-2d");
 
   await page.getByRole("button", { name: "Filters" }).click();
-  let backTrace = page.getByRole("region", { name: "Back trace" });
+  let backTrace = page.getByRole("region", { name: "Reading path" });
   const reset = backTrace.getByRole("button", { name: "Reset" });
   const activate = backTrace.getByRole("button", { name: "Activate" });
   await expect(activate).toHaveAttribute("aria-pressed", "false");
@@ -186,7 +186,7 @@ test("records and resets session-only Back trace visits across reader navigation
   await expect(graph).toHaveAttribute("data-back-trace-node-count", "2");
   await filters.getByLabel("component", { exact: true }).uncheck();
 
-  backTrace = page.getByRole("region", { name: "Back trace" });
+  backTrace = page.getByRole("region", { name: "Reading path" });
   await backTrace.getByRole("button", { name: "Deactivate" }).click();
   await expect(backTrace.getByRole("button", { name: "Activate" })).toHaveAttribute(
     "aria-pressed",
@@ -201,7 +201,7 @@ test("records and resets session-only Back trace visits across reader navigation
   await expect(graph).toHaveAttribute("data-back-trace-selected-visits", "0");
 
   await page.getByRole("button", { name: "Filters" }).click();
-  backTrace = page.getByRole("region", { name: "Back trace" });
+  backTrace = page.getByRole("region", { name: "Reading path" });
   await backTrace.getByRole("button", { name: "Reset" }).click();
   await expect(graph).toHaveAttribute("data-back-trace-node-count", "0");
   await expect(backTrace.getByRole("button", { name: "Reset" })).toBeDisabled();
@@ -222,7 +222,7 @@ test("records and resets session-only Back trace visits across reader navigation
   await page.reload();
   await expect(graph).toHaveAttribute("data-back-trace-node-count", "0");
   await page.getByRole("button", { name: "Filters" }).click();
-  backTrace = page.getByRole("region", { name: "Back trace" });
+  backTrace = page.getByRole("region", { name: "Reading path" });
   await expect(backTrace.getByRole("button", { name: "Activate" })).toHaveAttribute(
     "aria-pressed",
     "false",
@@ -910,7 +910,7 @@ test("mobile touch retains graph controls and directional navigation", async ({
   test.skip(testInfo.project.name !== "mobile-reader", "mobile project only");
   await page.goto("");
   await page.getByRole("button", { name: "Filters" }).tap();
-  const backTrace = page.getByRole("region", { name: "Back trace" });
+  const backTrace = page.getByRole("region", { name: "Reading path" });
   await backTrace.getByRole("button", { name: "Activate" }).tap();
   await page.getByLabel("Search notes").fill("multiplication");
   await page.getByRole("button", { name: /^Multiplication/ }).tap();

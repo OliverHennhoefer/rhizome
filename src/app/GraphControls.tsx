@@ -265,12 +265,12 @@ export function GraphControls({
               </span>
               <i aria-hidden="true">↗</i>
             </button>
-            <section aria-label="Back trace" className="back-trace-control">
+            <section aria-label="Reading path" className="back-trace-control">
               <div>
-                <strong>Back trace</strong>
+                <strong>Reading path</strong>
                 <small>Highlight your reading path on the graph</small>
               </div>
-              <fieldset aria-label="Back trace controls" className="back-trace-actions">
+              <fieldset aria-label="Reading path controls" className="back-trace-actions">
                 <button aria-pressed={backTraceActive} onClick={onToggleBackTrace} type="button">
                   {backTraceActive ? "Deactivate" : "Activate"}
                 </button>
