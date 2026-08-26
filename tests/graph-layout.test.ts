@@ -752,6 +752,14 @@ describe("label policy", () => {
     expect(labelZoomStyleForRatio(4)).toEqual({ visible: false, size: 6.5, opacity: 0 });
   });
 
+  it("requires closer zoom before revealing labels on smaller screens", () => {
+    expect(labelZoomStyleForRatio(2.2, 390).visible).toBe(false);
+    expect(labelZoomStyleForRatio(2, 390).opacity).toBeLessThan(
+      labelZoomStyleForRatio(2, 1440).opacity,
+    );
+    expect(labelZoomStyleForRatio(2, 1056)).toEqual(labelZoomStyleForRatio(2, 1440));
+  });
+
   it("eases graph emphasis symmetrically without snapping", () => {
     expect(HOVER_TRANSITION_DURATION_MS).toBe(450);
     expect(hoverTransitionProgress(0)).toBe(0);

@@ -10,6 +10,8 @@ export const LABEL_ZOOM_SETTINGS = {
   minimumSize: 6.5,
   fullOpacityRatio: 0.7,
   hiddenRatio: 3,
+  fullViewportWidth: 1056,
+  minimumViewportScale: 0.72,
 } as const;
 
 export const HOVER_TRANSITION_DURATION_MS = 450;
@@ -22,19 +24,25 @@ function round(value: number): number {
   return Math.round(value * 1_000) / 1_000;
 }
 
-export function labelZoomStyleForRatio(ratio: number): LabelZoomStyle {
+export function labelZoomStyleForRatio(
+  ratio: number,
+  viewportWidth: number = LABEL_ZOOM_SETTINGS.fullViewportWidth,
+): LabelZoomStyle {
   const safeRatio = Number.isFinite(ratio) && ratio > 0 ? ratio : 1;
+  const safeViewportWidth = Number.isFinite(viewportWidth) && viewportWidth > 0 ? viewportWidth : 1;
+  const viewportScale = clamp(
+    safeViewportWidth / LABEL_ZOOM_SETTINGS.fullViewportWidth,
+    LABEL_ZOOM_SETTINGS.minimumViewportScale,
+    1,
+  );
+  const fullOpacityRatio = LABEL_ZOOM_SETTINGS.fullOpacityRatio * viewportScale;
+  const hiddenRatio = LABEL_ZOOM_SETTINGS.hiddenRatio * viewportScale;
   const size = clamp(
     LABEL_ZOOM_SETTINGS.baseSize / Math.sqrt(safeRatio),
     LABEL_ZOOM_SETTINGS.minimumSize,
     LABEL_ZOOM_SETTINGS.maximumSize,
   );
-  const fadeProgress = clamp(
-    (LABEL_ZOOM_SETTINGS.hiddenRatio - safeRatio) /
-      (LABEL_ZOOM_SETTINGS.hiddenRatio - LABEL_ZOOM_SETTINGS.fullOpacityRatio),
-    0,
-    1,
-  );
+  const fadeProgress = clamp((hiddenRatio - safeRatio) / (hiddenRatio - fullOpacityRatio), 0, 1);
   const opacity = fadeProgress * fadeProgress * (3 - 2 * fadeProgress);
 
   return {

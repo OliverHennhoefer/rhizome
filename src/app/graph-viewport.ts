@@ -377,7 +377,7 @@ export class GraphViewportSession {
 
   private applyLabelZoom(ratio: number): void {
     const previousVisibility = this.labelZoomStyle.visible;
-    this.labelZoomStyle = labelZoomStyleForRatio(ratio);
+    this.labelZoomStyle = labelZoomStyleForRatio(ratio, this.renderer.getDimensions().width);
     this.container.setAttribute(
       "data-label-visibility",
       this.labelZoomStyle.visible ? "all" : "none",
@@ -1139,6 +1139,7 @@ export class GraphViewportSession {
   resize(): void {
     if (this.destroyed) return;
     this.renderer.resize(true).scheduleRender();
+    this.applyLabelZoom(this.renderer.getCamera().getState().ratio);
     const snapshot = this.snapshot;
     if (this.overviewActive) {
       this.centerOverview();
