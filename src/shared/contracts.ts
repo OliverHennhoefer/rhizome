@@ -1,90 +1,35 @@
-export type NodeKind = "note" | "missing" | "external";
+import type { z } from "zod";
+import type {
+  ArtifactReferenceSchema,
+  BuildDiagnosticSchema,
+  EdgeEvidenceSchema,
+  GraphEdgeSchema,
+  GraphManifestSchema,
+  GraphNodeSchema,
+  KnowledgeCatalogSchema,
+  KnowledgeDocumentSchema,
+  KnowledgeManifestSchema,
+  NodeDetailsSchema,
+  PublicConfigSchema,
+  RelationDefinitionSchema,
+  SourceRangeSchema,
+} from "./artifact-schemas.ts";
 
-export interface BuildDiagnostic {
-  severity: "warning" | "error";
-  code: string;
-  message: string;
-  path?: string;
-  line?: number;
-}
-
-export interface RelationDefinition {
-  label: string;
-  inverseLabel?: string;
-  directed: boolean;
-  color: string;
-}
-
-export interface PublicConfig {
-  site: { title: string };
-  relations: Record<string, RelationDefinition>;
-}
-
-export interface GraphManifest {
-  schemaVersion: 2;
-  contentHash: string;
-  config: PublicConfig;
-  nodes: GraphNode[];
-  edges: GraphEdge[];
-  facets: {
-    tags: Record<string, string[]>;
-    types: Record<string, string[]>;
-    relations: Record<string, string[]>;
-  };
-  diagnostics: BuildDiagnostic[];
-}
-
-export interface GraphNode {
-  id: string;
-  kind: NodeKind;
-  title: string;
-  path?: string;
-  aliases: string[];
-  types: string[];
-  tags: string[];
-  detailsRef: string;
-  x: number;
-  y: number;
-  community: number;
-  degree: number;
-}
-
-export interface GraphEdge {
-  id: string;
-  source: string;
-  target: string;
-  type: string;
-  directed: boolean;
-  occurrences: number;
-}
-
-export interface NodeDetails {
-  schemaVersion: 1;
-  id: string;
-  html?: string;
-  incoming: EdgeEvidence[];
-  outgoing: EdgeEvidence[];
-}
-
-export interface EdgeEvidence {
-  edgeId: string;
-  source: string;
-  target: string;
-  type: string;
-  origin: "body" | "frontmatter";
-  anchor?: string;
-  range: SourceRange;
-  excerpt: string;
-}
-
+export type ArtifactReference = z.infer<typeof ArtifactReferenceSchema>;
+export type BuildDiagnostic = z.infer<typeof BuildDiagnosticSchema>;
+export type RelationDefinition = z.infer<typeof RelationDefinitionSchema>;
+export type PublicConfig = z.infer<typeof PublicConfigSchema>;
+export type GraphManifest = z.infer<typeof GraphManifestSchema>;
+export type GraphNode = z.infer<typeof GraphNodeSchema>;
+export type NodeKind = GraphNode["kind"];
+export type GraphEdge = z.infer<typeof GraphEdgeSchema>;
+export type EdgeEvidence = z.infer<typeof EdgeEvidenceSchema>;
+export type NodeDetails = z.infer<typeof NodeDetailsSchema>;
+export type SourceRange = z.infer<typeof SourceRangeSchema>;
+export type KnowledgeManifest = z.infer<typeof KnowledgeManifestSchema>;
+export type KnowledgeCatalog = z.infer<typeof KnowledgeCatalogSchema>;
+export type KnowledgeDocument = z.infer<typeof KnowledgeDocumentSchema>;
 export interface SourcePoint {
   line: number;
   column: number;
-}
-
-export interface SourceRange {
-  startLine: number;
-  startColumn: number;
-  endLine: number;
-  endColumn: number;
 }

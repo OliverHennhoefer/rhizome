@@ -8,6 +8,7 @@ import Graph from "graphology";
 import louvain from "graphology-communities-louvain";
 import forceAtlas2 from "graphology-layout-forceatlas2";
 import picomatch from "picomatch";
+import { ARTIFACT_LIMITS } from "../shared/artifact-schemas.ts";
 import type {
   BuildDiagnostic,
   EdgeEvidence,
@@ -17,6 +18,7 @@ import type {
   NodeDetails,
 } from "../shared/contracts.ts";
 import { loadConfig } from "./config.ts";
+import { emitKnowledge } from "./knowledge.ts";
 import { parseNote } from "./parse.ts";
 import { renderNote } from "./render.ts";
 import { assertNoCaseCollisions, ResolutionError, ResourceIndex } from "./resolve.ts";
@@ -598,6 +600,8 @@ export class VaultCompiler {
         ...(evidenceByNode.get(node.id) ?? { incoming: [], outgoing: [] }),
       };
       const json = JSON.stringify(details);
+      if (Buffer.byteLength(json) > ARTIFACT_LIMITS.detail)
+        throw new Error(`Node details for ${node.id} exceed the retrieval detail byte limit`);
       node.detailsRef = `data/details/${sha256(json).slice(0, 24)}.json`;
       assets.set(node.detailsRef, json);
     }
@@ -613,19 +617,19 @@ export class VaultCompiler {
       facets: facets(nodes, builtEdges.edges),
       diagnostics,
     };
-    const manifest: GraphManifest = {
-      ...manifestCore,
-      contentHash: sha256(JSON.stringify(manifestCore)),
-    };
-    const manifestJson = JSON.stringify(manifest);
-    if (gzipSync(manifestJson).byteLength > MANIFEST_GZIP_TARGET) {
+    if (gzipSync(JSON.stringify(manifestCore)).byteLength > MANIFEST_GZIP_TARGET) {
       diagnostics.push({
         severity: "warning",
         code: "manifest-budget",
         message: "Compressed graph manifest exceeds the 6 MB benchmark target",
       });
     }
+    const manifest: GraphManifest = {
+      ...manifestCore,
+      contentHash: sha256(JSON.stringify(manifestCore)),
+    };
     assets.set("data/graph.json", JSON.stringify(manifest));
+    emitKnowledge(notes, manifest, assets);
     assets.set(".nojekyll", "");
 
     const totalBytes = [...assets.values()].reduce(

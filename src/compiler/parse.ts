@@ -139,6 +139,15 @@ export async function parseNote(
 ): Promise<ParsedNote> {
   const source = await readFile(absolutePath, "utf8");
   const relativePath = path.relative(vaultRoot, absolutePath).split(path.sep).join("/");
+  return { absolutePath, ...(await parseMarkdown(source, relativePath, config)) };
+}
+
+/** Parse source independently of disk, also used by the frozen retrieval corpus. */
+export async function parseMarkdown(
+  source: string,
+  relativePath: string,
+  config: RhizomeConfig,
+): Promise<Omit<ParsedNote, "absolutePath">> {
   const id = relativePath.replace(/\.md$/i, "");
   const split = splitFrontmatter(source);
   const counter = new LineCounter();
@@ -227,7 +236,6 @@ export async function parseNote(
     .filter(Boolean);
 
   return {
-    absolutePath,
     id,
     path: relativePath,
     source,

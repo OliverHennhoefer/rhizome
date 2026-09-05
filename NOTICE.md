@@ -14,3 +14,7 @@ package for transient browser-side physics.
 Mathematical notation is parsed and rendered at build time with the MIT-licensed `remark-math`,
 `rehype-katex`, and KaTeX packages. KaTeX styles and fonts are bundled locally; Rhizome loads no
 client-side math renderer or math CDN.
+
+The public MCP endpoint uses the MIT-licensed Model Context Protocol TypeScript packages,
+Cloudflare Agents, MiniSearch, Zod, and the English stopword list from `stopword`. Worker tooling is provided by Cloudflare under the MIT or
+Apache-2.0 license.

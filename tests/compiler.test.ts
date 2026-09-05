@@ -3,17 +3,25 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { VaultCompiler } from "../src/compiler/compile";
-import type { GraphManifest, NodeDetails } from "../src/shared/contracts";
+import { emitKnowledge } from "../src/compiler/knowledge";
+import { parseNote } from "../src/compiler/parse";
+import { sha256, verifyEnvelope } from "../src/mcp/artifacts";
+import type {
+  GraphManifest,
+  KnowledgeCatalog,
+  KnowledgeManifest,
+  NodeDetails,
+} from "../src/shared/contracts";
 
 const workspaces: string[] = [];
 
-async function fixture(files: Record<string, string>): Promise<string> {
+async function fixture(files: Record<string, string>, exclude: string[] = []): Promise<string> {
   const root = await mkdtemp(path.join(tmpdir(), "rhizome-test-"));
   workspaces.push(root);
   await mkdir(path.join(root, "content"), { recursive: true });
   await writeFile(
     path.join(root, "rhizome.config.yaml"),
-    `site:\n  title: Test\ncontent:\n  root: content\n  exclude: []\nrelations:\n  depends-on:\n    label: Depends on\n    inverseLabel: Dependency of\n    directed: true\n    color: "#d97757"\n  related-to:\n    label: Related to\n    directed: false\n    color: "#4f8fba"\n`,
+    `site:\n  title: Test\ncontent:\n  root: content\n  exclude: ${JSON.stringify(exclude)}\nrelations:\n  depends-on:\n    label: Depends on\n    inverseLabel: Dependency of\n    directed: true\n    color: "#d97757"\n  related-to:\n    label: Related to\n    directed: false\n    color: "#4f8fba"\n`,
   );
   await writeFile(
     path.join(root, "rhizome.schema.json"),
@@ -29,6 +37,10 @@ async function fixture(files: Record<string, string>): Promise<string> {
 
 function manifestFrom(assets: Map<string, string | Uint8Array>): GraphManifest {
   return JSON.parse(String(assets.get("data/graph.json"))) as GraphManifest;
+}
+
+function knowledgeFrom(assets: Map<string, string | Uint8Array>): KnowledgeManifest {
+  return JSON.parse(String(assets.get("data/knowledge.json"))) as KnowledgeManifest;
 }
 
 function semantic(manifest: GraphManifest) {
@@ -159,6 +171,111 @@ Malformed surrounding Markdown stays readable: $x + y.
     expect(manifest.nodes.some((node) => node.kind === "missing" && node.title === "Draft")).toBe(
       true,
     );
+  });
+
+  it("emits exact public Markdown in a deterministic knowledge manifest", async () => {
+    const publicSource = `---\ntitle: Public note\naliases: [Visible]\ntags: [Test]\n---\n# Public\n\nExact **Markdown**.\n`;
+    const root = await fixture(
+      {
+        "a/First.md": "# First\n",
+        "z/Public.md": publicSource,
+        "Draft.md": "---\ndraft: true\n---\n# Private draft\n",
+        "excluded/Secret.md": "# Excluded secret\n",
+      },
+      ["excluded/**"],
+    );
+
+    const first = await new VaultCompiler({ projectRoot: root }).clean();
+    const second = await new VaultCompiler({ projectRoot: root }).clean();
+    const graph = manifestFrom(first.assets);
+    const knowledge = knowledgeFrom(first.assets);
+
+    expect(knowledge).toEqual(knowledgeFrom(second.assets));
+    expect(knowledge.schemaVersion).toBe(2);
+    expect(knowledge.graphContentHash).toBe(graph.contentHash);
+    const catalog: KnowledgeCatalog = JSON.parse(String(first.assets.get(knowledge.catalog.path)));
+    expect(
+      catalog.documents.map(({ markdownRef, lineLengths: _lines, ...doc }) => ({
+        ...doc,
+        markdown: first.assets.get(markdownRef.path),
+      })),
+    ).toEqual([
+      {
+        id: "a/First",
+        title: "First",
+        path: "a/First.md",
+        aliases: [],
+        types: ["note"],
+        tags: [],
+        markdown: "# First\n",
+      },
+      {
+        id: "z/Public",
+        title: "Public note",
+        path: "z/Public.md",
+        aliases: ["Visible"],
+        types: ["note"],
+        tags: ["test"],
+        markdown: publicSource,
+      },
+    ]);
+    expect(knowledge.contentHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(knowledge.noteCount).toBe(2);
+    const parsed = await Promise.all(
+      catalog.documents.map((doc) =>
+        parseNote(path.join(root, "content", doc.path), path.join(root, "content"), {
+          site: { title: "Test" },
+          content: { root: "content", exclude: [] },
+          relations: {},
+        }),
+      ),
+    );
+    const relayout = structuredClone(graph);
+    relayout.nodes[0].x += 100;
+    relayout.diagnostics.push({
+      severity: "warning",
+      code: "layout-only",
+      message: "Layout changed",
+    });
+    const { contentHash: _oldHash, ...relayoutCore } = relayout;
+    relayout.contentHash = await sha256(JSON.stringify(relayoutCore));
+    const relayoutAssets = new Map<string, string | Uint8Array>();
+    emitKnowledge(parsed, relayout, relayoutAssets);
+    const relayoutKnowledge = knowledgeFrom(relayoutAssets);
+    expect(relayoutKnowledge.graph.hash).not.toBe(knowledge.graph.hash);
+    expect(relayoutKnowledge.index.hash).toBe(knowledge.index.hash);
+    expect(() =>
+      emitKnowledge([{ ...parsed[0], source: "x".repeat(2 * 1024 * 1024 + 1) }], graph, new Map()),
+    ).toThrow("byte limit");
+    expect(JSON.stringify(knowledge).length).toBeLessThan(2048);
+    await verifyEnvelope(String(first.assets.get("data/knowledge.json")));
+    await verifyEnvelope(String(first.assets.get(knowledge.graph.path)));
+    for (const ref of [
+      knowledge.catalog,
+      knowledge.index,
+      knowledge.graph,
+      ...catalog.documents.map((doc) => doc.markdownRef),
+    ]) {
+      expect(await sha256(String(first.assets.get(ref.path)))).toBe(ref.hash);
+      expect(Buffer.byteLength(String(first.assets.get(ref.path)))).toBe(ref.bytes);
+      expect(first.assets.get(ref.path)).toEqual(second.assets.get(ref.path));
+    }
+
+    await writeFile(
+      path.join(root, "content", "z/Public.md"),
+      publicSource.replace("Exact **Markdown**.", "Changed **Markdown**."),
+    );
+    const changedAssets = (await new VaultCompiler({ projectRoot: root }).clean()).assets;
+    const changed = knowledgeFrom(changedAssets);
+    expect(changed.contentHash).not.toBe(knowledge.contentHash);
+    expect(changed.index.hash).not.toBe(knowledge.index.hash);
+    const changedCatalog: KnowledgeCatalog = JSON.parse(
+      String(changedAssets.get(changed.catalog.path)),
+    );
+    const changedDoc = changedCatalog.documents.find((doc) => doc.id === "z/Public");
+    expect(changedDoc).toBeDefined();
+    if (!changedDoc) throw new Error("Changed document missing");
+    expect(changedAssets.get(changedDoc.markdownRef.path)).toContain("Changed **Markdown**.");
   });
 
   it("keeps the demonstration vault resolved, connected, and reachable from the LLM", async () => {

@@ -1,7 +1,14 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.10/schema.json",
   "files": {
-    "includes": ["**", "!!dist", "!!node_modules", "!!playwright-report", "!!test-results"]
+    "includes": [
+      "**",
+      "!!dist",
+      "!!node_modules",
+      "!!playwright-report",
+      "!!test-results",
+      "!!.rhizome-cache"
+    ]
   },
   "formatter": {
     "enabled": true,
