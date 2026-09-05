@@ -1,0 +1,30 @@
+{
+  "total": {
+    "cases": 100,
+    "precisionAt5": 0.56375,
+    "recallAt5": 0.9891666666666665,
+    "mrr": 0.984375,
+    "hitAt5": 1,
+    "exactFirst": 1,
+    "emptyAccuracy": 1
+  },
+  "development": {
+    "cases": 70,
+    "precisionAt5": 0.5982142857142857,
+    "recallAt5": 0.9845238095238095,
+    "mrr": 0.9776785714285714,
+    "hitAt5": 1,
+    "exactFirst": 1,
+    "emptyAccuracy": 1
+  },
+  "heldOut": {
+    "cases": 30,
+    "precisionAt5": 0.4833333333333334,
+    "recallAt5": 1,
+    "mrr": 1,
+    "hitAt5": 1,
+    "exactFirst": 1,
+    "emptyAccuracy": 1
+  },
+  "failures": []
+}

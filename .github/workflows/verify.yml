@@ -28,7 +28,10 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm test
+      - run: npm run mcp:evaluate
       - run: timeout 7m npm run build
+      - run: npm run mcp:check
+      - run: npm run mcp:integration
       - name: Install browser
         run: npx playwright install --with-deps chromium
       - run: npm run test:e2e

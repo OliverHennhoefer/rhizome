@@ -13,5 +13,6 @@
     "noEmit": true,
     "types": ["node", "vitest/globals"]
   },
-  "include": ["vite.config.ts", "src/compiler", "src/shared", "tests"]
+  "include": ["vite.config.ts", "src/compiler", "src/shared", "tests", "scripts"],
+  "exclude": ["scripts/benchmark-worker.ts"]
 }

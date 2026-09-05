@@ -16,6 +16,9 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "benchmark": "tsx scripts/benchmark.ts",
+    "mcp:evaluate": "node --import tsx scripts/mcp-evaluate.ts",
+    "mcp:integration": "node --import tsx scripts/mcp-integration.ts",
+    "mcp:benchmark": "node --expose-gc --import tsx scripts/mcp-benchmark.ts",
     "mcp:dev": "WRANGLER_WRITE_LOGS=false wrangler dev",
     "mcp:check": "WRANGLER_WRITE_LOGS=false wrangler deploy --dry-run --outdir .rhizome-cache/worker",
     "mcp:deploy": "WRANGLER_WRITE_LOGS=false wrangler deploy"

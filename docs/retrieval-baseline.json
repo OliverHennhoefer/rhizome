@@ -1,0 +1,55 @@
+{
+  "engine": "Milestone 1 MiniSearch, before retrieval changes",
+  "date": "2026-09-04",
+  "cases": 100,
+  "total": {
+    "precisionAt5": 0.4602083333333331,
+    "recallAt5": 0.9916666666666666,
+    "mrr": 0.9372916666666666,
+    "hitAt5": 1,
+    "exactFirst": 0.8888888888888888,
+    "emptyAccuracy": 0.2
+  },
+  "development": {
+    "cases": 70,
+    "precisionAt5": 0.47172619047619035,
+    "recallAt5": 0.988095238095238,
+    "mrr": 0.9193452380952382,
+    "hitAt5": 1,
+    "exactFirst": 0.8333333333333334,
+    "emptyAccuracy": 0.07142857142857142
+  },
+  "heldOut": {
+    "cases": 30,
+    "precisionAt5": 0.4333333333333334,
+    "recallAt5": 1,
+    "mrr": 0.9791666666666666,
+    "hitAt5": 1,
+    "exactFirst": 1,
+    "emptyAccuracy": 0.5
+  },
+  "failedCases": [
+    "vault-02",
+    "vault-03",
+    "vault-11",
+    "vault-12",
+    "vault-13",
+    "vault-14",
+    "vault-21",
+    "vault-22",
+    "vault-27",
+    "vault-31",
+    "vault-32",
+    "vault-41",
+    "vault-42",
+    "vault-51",
+    "vault-52",
+    "vault-53",
+    "vault-59",
+    "vault-60",
+    "kitchen-11",
+    "kitchen-12",
+    "systems-12",
+    "systems-19"
+  ]
+}
