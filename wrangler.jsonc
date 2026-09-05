@@ -1,0 +1,10 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "rhizome-mcp",
+  "main": "src/mcp/worker.ts",
+  "compatibility_date": "2026-09-04",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "RHIZOME_SITE_URL": "https://oliverhennhoefer.github.io/rhizome/"
+  }
+}

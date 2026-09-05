@@ -5,8 +5,18 @@ import type {
   GraphNode,
   NodeDetails,
 } from "../shared/contracts";
+import { compareText } from "../shared/order";
 
-export type RelationshipDirection = "bidirectional" | "incoming" | "outgoing" | "undirected";
+import {
+  compareEvidence,
+  directionFor,
+  directionRank,
+  type EdgeDirection,
+  evidenceKey,
+  relationLabel,
+} from "../shared/relationships";
+
+export type RelationshipDirection = "bidirectional" | EdgeDirection;
 
 export interface ExternalDisplay {
   hostname: string;
@@ -30,39 +40,8 @@ export interface RelationshipView {
   external?: ExternalDisplay;
 }
 
-function evidenceKey(item: EdgeEvidence): string {
-  return [
-    item.source,
-    item.target,
-    item.origin,
-    item.range.startLine,
-    item.range.startColumn,
-    item.range.endLine,
-    item.range.endColumn,
-  ].join(":");
-}
-
-function directionFor(edge: GraphEdge, nodeId: string): RelationshipDirection {
-  if (!edge.directed) return "undirected";
-  return edge.source === nodeId ? "outgoing" : "incoming";
-}
-
-function relationLabel(
-  edge: GraphEdge,
-  direction: RelationshipDirection,
-  manifest: GraphManifest,
-): string {
-  if (edge.type === "link") {
-    if (direction === "outgoing") return "Links to";
-    if (direction === "incoming") return "Linked from";
-    return "Linked";
-  }
-  const definition = manifest.config.relations[edge.type];
-  if (direction === "incoming" && definition?.inverseLabel) return definition.inverseLabel;
-  return definition?.label ?? edge.type;
-}
-
 function combinedDirection(directions: ReadonlySet<RelationshipDirection>): RelationshipDirection {
+  if (directions.has("self")) return "self";
   if (directions.has("undirected")) return "undirected";
   if (directions.has("incoming") && directions.has("outgoing")) return "bidirectional";
   if (directions.has("outgoing")) return "outgoing";
@@ -162,12 +141,7 @@ export function buildRelationshipViews(
     grouped.set(counterpartId, group);
   }
 
-  const rank: Record<RelationshipDirection, number> = {
-    bidirectional: 0,
-    outgoing: 1,
-    incoming: 2,
-    undirected: 3,
-  };
+  const rank = directionRank;
   const views: RelationshipView[] = [...grouped.values()].map((group) => {
     const relations = [...group.relations.values()]
       .map(({ directions, edge }) => {
@@ -181,21 +155,16 @@ export function buildRelationshipViews(
       .sort(
         (left, right) =>
           rank[left.direction] - rank[right.direction] ||
-          left.label.localeCompare(right.label) ||
-          left.type.localeCompare(right.type),
+          compareText(left.label, right.label) ||
+          compareText(left.type, right.type),
       );
     const summary = relationshipSummary(relations);
     return {
-      edgeId: group.edgeIds.sort((left, right) => left.localeCompare(right))[0],
+      edgeId: group.edgeIds.sort(compareText)[0],
       counterpart: group.counterpart,
       relations,
       ...(summary ? { summary } : {}),
-      evidence: [...group.evidence.values()].sort(
-        (left, right) =>
-          left.source.localeCompare(right.source) ||
-          left.range.startLine - right.range.startLine ||
-          left.range.startColumn - right.range.startColumn,
-      ),
+      evidence: [...group.evidence.values()].sort(compareEvidence),
       external: externalDisplay(group.counterpart),
     };
   });
@@ -205,9 +174,9 @@ export function buildRelationshipViews(
     const rightRelation = right.relations[0];
     return (
       rank[leftRelation.direction] - rank[rightRelation.direction] ||
-      leftRelation.label.localeCompare(rightRelation.label) ||
-      left.counterpart.title.localeCompare(right.counterpart.title) ||
-      left.edgeId.localeCompare(right.edgeId)
+      compareText(leftRelation.label, rightRelation.label) ||
+      compareText(left.counterpart.title, right.counterpart.title) ||
+      compareText(left.edgeId, right.edgeId)
     );
   });
 }

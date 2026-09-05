@@ -15,7 +15,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "benchmark": "tsx scripts/benchmark.ts"
+    "benchmark": "tsx scripts/benchmark.ts",
+    "mcp:dev": "WRANGLER_WRITE_LOGS=false wrangler dev",
+    "mcp:check": "WRANGLER_WRITE_LOGS=false wrangler deploy --dry-run --outdir .rhizome-cache/worker",
+    "mcp:deploy": "WRANGLER_WRITE_LOGS=false wrangler deploy"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.0.0",
