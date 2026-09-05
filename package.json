@@ -54,7 +54,7 @@
     "zod": "^4.5.4"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.2.2",
+    "@biomejs/biome": "^2.5.11",
     "@cloudflare/workers-types": "^5.20260904.1",
     "@modelcontextprotocol/client": "^2.0.0",
     "@playwright/test": "^1.55.0",
@@ -64,11 +64,11 @@
     "@types/react": "^19.1.12",
     "@types/react-dom": "^19.1.9",
     "@types/stopword": "^2.0.3",
-    "@vitejs/plugin-react": "^6.1.0",
+    "@vitejs/plugin-react": "^6.1.1",
     "esbuild": "^0.28.2",
     "graphology-types": "^0.24.8",
     "miniflare": "^5.20260903.0-alpha",
-    "tsx": "^4.20.5",
+    "tsx": "^4.23.13",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
     "vitest": "^4.1.11",
