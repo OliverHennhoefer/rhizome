@@ -54,24 +54,24 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.2.2",
-    "@cloudflare/workers-types": "^5.20260904.1",
+    "@biomejs/biome": "^2.5.13",
+    "@cloudflare/workers-types": "^5.20260911.1",
     "@modelcontextprotocol/client": "^2.0.0",
-    "@playwright/test": "^1.55.0",
+    "@playwright/test": "^1.63.0",
     "@types/d3-force": "^3.0.10",
-    "@types/node": "^24.3.0",
+    "@types/node": "^24.13.4",
     "@types/picomatch": "^4.0.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/stopword": "^2.0.3",
-    "@vitejs/plugin-react": "^6.1.0",
+    "@vitejs/plugin-react": "^6.1.1",
     "esbuild": "^0.28.2",
     "graphology-types": "^0.24.8",
-    "miniflare": "^5.20260910.0-alpha",
-    "tsx": "^4.20.5",
+    "miniflare": "^5.20260903.0-alpha",
+    "tsx": "^4.23.13",
     "typescript": "^7.0.2",
-    "vite": "^8.2.2",
-    "vitest": "^4.1.11",
-    "wrangler": "^4.131.0"
+    "vite": "^8.3.0",
+    "vitest": "^5.0.0",
+    "wrangler": "^4.131.1"
   }
 }
